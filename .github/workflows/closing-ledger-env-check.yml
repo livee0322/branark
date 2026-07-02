@@ -1,0 +1,70 @@
+name: Branark Closing Ledger Env Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      memo:
+        description: "수동 점검 메모"
+        required: false
+        default: "manual env check"
+
+permissions:
+  contents: read
+
+jobs:
+  env-check:
+    name: Check Google Drive / Sheets env
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      BRANARK_TARGET_MONTH_FOLDER_ID: ${{ vars.BRANARK_TARGET_MONTH_FOLDER_ID }}
+      BRANARK_ORDER_UPLOAD_FOLDER_ID: ${{ vars.BRANARK_ORDER_UPLOAD_FOLDER_ID }}
+      BRANARK_CLOSING_LEDGER_SPREADSHEET_ID: ${{ vars.BRANARK_CLOSING_LEDGER_SPREADSHEET_ID }}
+      BRANARK_PRICE_FILE_ID: ${{ vars.BRANARK_PRICE_FILE_ID }}
+    steps:
+      - name: Check required GitHub Actions env
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=0
+
+          check_env() {
+            local name="$1"
+            local value="${!name:-}"
+            if [ -z "$value" ]; then
+              echo "::error::$name 값이 비어 있습니다. GitHub Actions Secrets/Variables 설정을 확인하세요."
+              missing=1
+            else
+              echo "::notice::$name 설정 확인 완료"
+            fi
+          }
+
+          check_env GOOGLE_SERVICE_ACCOUNT_JSON
+          check_env BRANARK_TARGET_MONTH_FOLDER_ID
+          check_env BRANARK_ORDER_UPLOAD_FOLDER_ID
+          check_env BRANARK_CLOSING_LEDGER_SPREADSHEET_ID
+          check_env BRANARK_PRICE_FILE_ID
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Print non-secret target summary
+        shell: bash
+        run: |
+          echo "브랜아크 일일마감 자동화 대상 정보"
+          echo "- 월별 작업 폴더 ID: ${BRANARK_TARGET_MONTH_FOLDER_ID}"
+          echo "- 발주서 저장 폴더 ID: ${BRANARK_ORDER_UPLOAD_FOLDER_ID}"
+          echo "- 일일 마감 양식 Spreadsheet ID: ${BRANARK_CLOSING_LEDGER_SPREADSHEET_ID}"
+          echo "- 공급단가 파일 ID: ${BRANARK_PRICE_FILE_ID}"
+          echo "- Google Service Account JSON: configured"
+
+      - name: Write Google credentials file for future API jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          credentials_path="${RUNNER_TEMP}/google-service-account.json"
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > "$credentials_path"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$credentials_path" >> "$GITHUB_ENV"
+          echo "::notice::Google credentials file prepared for following steps"

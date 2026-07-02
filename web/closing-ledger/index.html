@@ -19,6 +19,31 @@
       <p>일일 마감 양식을 마음대로 변경하지 마세요. 컬럼이 변경되면 자동화가 중단됩니다.</p>
     </section>
 
+    <section class="card result-card">
+      <div class="section-title">
+        <span>0</span>
+        <div>
+          <h2>연동 기준 정보</h2>
+          <p>실제 자동화에서 사용할 Google Drive 저장 위치와 작업 시트 기준입니다.</p>
+        </div>
+      </div>
+
+      <div class="summary-grid">
+        <div><small>상위 작업 폴더</small><strong>브랜아크 작업 Drive / 7월</strong></div>
+        <div><small>발주서 저장 폴더</small><strong>7월 / 발주서</strong></div>
+        <div><small>일일 마감 작업 시트</small><strong>일일 마감 양식</strong></div>
+        <div><small>단가표 파일</small><strong>공급단가.XLS</strong></div>
+      </div>
+
+      <div class="rule-box">
+        <strong>저장 및 반영 기준</strong>
+        <p>발주서 업로드 파일은 Google Drive의 <b>7월 / 발주서</b> 폴더에 저장합니다.</p>
+        <p>검증 완료 데이터는 <b>일일 마감 양식</b> 시트에 주문일, 상품명, 수량, 공급단가, 공급가 합계, 비고 컬럼 기준으로 추가합니다.</p>
+        <p>공급단가는 <b>공급단가.XLS</b> 파일을 기준으로 매칭하며, 단가가 없는 상품은 자동 반영하지 않습니다.</p>
+        <p>발주서 분석 기준 시트는 <b>운송장</b>, <b>출고일지</b>, <b>출고일지(2)</b>입니다.</p>
+      </div>
+    </section>
+
     <section class="card upload-card">
       <div class="section-title">
         <span>1</span>
@@ -32,7 +57,7 @@
         <input id="orderFile" type="file" accept=".xlsx,.xls,.csv" />
         <span class="upload-icon">📎</span>
         <strong id="fileName">파일을 선택하세요</strong>
-        <em>Google Drive 저장 후 시트 연동 방식으로 처리됩니다.</em>
+        <em>Google Drive 7월 / 발주서 폴더 저장 후 일일 마감 양식에 연동됩니다.</em>
       </label>
 
       <div class="mode-box">

@@ -11,12 +11,12 @@
     <section class="hero-card">
       <p class="eyebrow">BRANARK CLOSING LEDGER · BRANARK ONLY</p>
       <h1>브랜아크 일일마감 자동화 실행</h1>
-      <p class="hero-copy">발주서 파일을 선택하면 Google Apps Script를 통해 개인 Google Drive 발주서 폴더에 저장하고, 일일 마감 양식에 테스트 행을 추가합니다.</p>
+      <p class="hero-copy">발주서 파일을 선택하면 브랜아크 전용 Apps Script 자동화가 실행되어 Google Drive 발주서 폴더에 저장하고, 일일 마감 양식에 테스트 행을 추가합니다.</p>
     </section>
 
     <section class="notice-card">
       <strong>브랜아크 전용</strong>
-      <p>이 화면은 브랜아크 일일마감 자동화 전용 페이지입니다. Apps Script Web App을 호출해 Drive 저장과 Sheet 작성을 실제로 수행하며, API Token은 코드에 저장하지 않고 화면에서 입력합니다.</p>
+      <p>이 화면은 브랜아크 일일마감 자동화 전용 페이지입니다. Web App URL과 API Token을 매번 입력하지 않고, 설정된 Apps Script 자동화로 바로 실행합니다.</p>
     </section>
 
     <section class="card result-card">
@@ -69,9 +69,9 @@
       </div>
 
       <div class="rule-box">
-        <strong>실행 전 필요한 값</strong>
-        <p>Apps Script 배포 URL은 <b>/exec</b>로 끝나는 Web App URL이어야 합니다. API Token은 Apps Script의 <b>API_TOKEN</b> 스크립트 속성과 같은 값이어야 합니다.</p>
-        <p>보안을 위해 URL과 Token은 GitHub 코드에 저장하지 않습니다. 필요할 때 화면에서 입력해 실행합니다.</p>
+        <strong>연결 상태</strong>
+        <p>Apps Script Web App URL은 페이지 설정 파일에서 1회 관리합니다. 사용자는 URL과 Token을 입력하지 않고 발주서 파일만 선택해 실행합니다.</p>
+        <p>Apps Script에는 <b>ALLOW_PAGE_UPLOAD=true</b> 스크립트 속성이 필요합니다. API Token은 GitHub Actions 호출용으로만 유지합니다.</p>
       </div>
     </section>
 
@@ -87,7 +87,7 @@
       <ol class="status-list">
         <li data-state="success"><b>1. 발주서 파일 첨부</b><small>xlsx / xls / csv</small></li>
         <li data-state="success"><b>2. 파일 형식 검사</b><small>확장자 확인</small></li>
-        <li data-state="success"><b>3. Apps Script 호출</b><small>Web App URL</small></li>
+        <li data-state="success"><b>3. 브랜아크 Apps Script 호출</b><small>자동 연결</small></li>
         <li data-state="success"><b>4. Google Drive 저장</b><small>발주서 폴더</small></li>
         <li data-state="waiting"><b>5. 단가표 접근 확인</b><small>PRICE_SHEET_ID</small></li>
         <li data-state="waiting"><b>6. 일일 마감 양식 작성</b><small>DAILY_SHEET_ID</small></li>
@@ -100,23 +100,16 @@
         <span>2</span>
         <div>
           <h2>발주서 업로드 및 일일마감 작성</h2>
-          <p>Apps Script URL과 API Token을 입력하고 발주서 파일을 선택한 뒤 실행합니다.</p>
+          <p>발주서 파일을 선택하고 주문 정보를 확인한 뒤 실행합니다. URL과 Token은 화면에서 입력하지 않습니다.</p>
         </div>
       </div>
 
-      <div class="form-grid two-columns">
-        <label class="form-field full-width">
-          <small>Apps Script Web App URL</small>
-          <input id="appsScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" />
-        </label>
-        <label class="form-field full-width">
-          <small>API Token</small>
-          <input id="appsScriptToken" type="password" placeholder="Apps Script API_TOKEN 값" autocomplete="off" />
-        </label>
-        <label class="inline-check full-width">
-          <input id="rememberSettings" type="checkbox" />
-          <span>이 브라우저에 Web App URL만 저장하기</span>
-        </label>
+      <div class="connection-panel" id="connectionPanel">
+        <div>
+          <small>자동화 연결</small>
+          <strong id="connectionStatus">설정 확인 중</strong>
+        </div>
+        <p id="connectionDescription">브랜아크 Apps Script Web App 설정을 확인하고 있습니다.</p>
       </div>
 
       <label class="upload-box" for="orderFile">
@@ -149,8 +142,8 @@
         </label>
       </div>
 
-      <button id="validateButton" class="primary-button" type="button">Apps Script로 업로드 및 시트 작성</button>
-      <p id="uploadMessage" class="helper-text">Apps Script Web App URL, API Token, 파일을 입력한 뒤 실행하세요.</p>
+      <button id="validateButton" class="primary-button" type="button">발주서 업로드 및 일일마감 작성</button>
+      <p id="uploadMessage" class="helper-text">파일을 선택한 뒤 실행하세요. Apps Script 연결값은 자동으로 사용됩니다.</p>
     </section>
 
     <section class="card">
@@ -203,8 +196,8 @@
         </div>
       </div>
       <div class="error-grid">
-        <span>Apps Script 배포 URL이 /exec인지</span>
-        <span>API Token이 GitHub 코드에 노출되지 않았는지</span>
+        <span>Apps Script Web App URL이 설정됐는지</span>
+        <span>Apps Script 속성 ALLOW_PAGE_UPLOAD=true인지</span>
         <span>발주서 폴더에 파일이 생성되는지</span>
         <span>일일 마감 양식 첫 번째 시트가 맞는지</span>
         <span>중복 파일명 차단 기준이 맞는지</span>
@@ -213,6 +206,7 @@
     </section>
   </main>
 
+  <script src="./web/closing-ledger/config.js"></script>
   <script src="./web/closing-ledger/script.js"></script>
 </body>
 </html>

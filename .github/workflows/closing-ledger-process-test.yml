@@ -110,11 +110,26 @@ jobs:
               if not isinstance(info, dict):
                   raise SystemExit("GOOGLE_SERVICE_ACCOUNT_JSON을 읽었지만 JSON object 형식이 아닙니다.")
 
-              required_keys = ["type", "client_email", "token_uri"]
+              required_keys = ["type", "client_email", "token_uri", "private_key", "private_key_id"]
               missing_keys = [key for key in required_keys if key not in info]
               if missing_keys:
                   raise SystemExit("서비스 계정 JSON 필수 키 누락: " + ", ".join(missing_keys))
 
+              private_key = str(info.get("private_key") or "").strip()
+              if "\\n" in private_key:
+                  private_key = private_key.replace("\\n", "\n")
+                  print("private_key의 escaped newline을 실제 줄바꿈으로 보정했습니다.")
+
+              if not private_key.startswith("-----BEGIN PRIVATE KEY-----"):
+                  raise SystemExit("private_key가 -----BEGIN PRIVATE KEY----- 로 시작하지 않습니다. JSON 키 파일 전체를 다시 저장하세요.")
+
+              if "-----END PRIVATE KEY-----" not in private_key:
+                  raise SystemExit("private_key에 -----END PRIVATE KEY----- 가 없습니다. JSON 키 파일 전체를 다시 저장하세요.")
+
+              if not private_key.endswith("\n"):
+                  private_key += "\n"
+
+              info["private_key"] = private_key
               print("Google service account JSON 형식 확인 완료:", info.get("client_email"))
               return info
 

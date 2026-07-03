@@ -134,6 +134,7 @@ h1 {
   cursor: pointer;
   text-align: center;
   padding: 26px;
+  margin-top: 18px;
 }
 
 .upload-box input {
@@ -156,21 +157,53 @@ h1 {
   font-style: normal;
 }
 
-.mode-box {
+.form-grid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
   margin: 18px 0;
-  color: var(--text);
 }
 
-.mode-box label {
+.form-grid.two-columns {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.form-field {
+  display: grid;
+  gap: 8px;
+}
+
+.form-field small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.form-field input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 14px;
+  color: var(--text);
+  background: #fff;
+  font-size: 15px;
+  outline: none;
+}
+
+.form-field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(104, 124, 244, 0.14);
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.inline-check {
   display: flex;
   gap: 8px;
   align-items: center;
-}
-
-.mode-box .disabled {
-  color: #9ca3af;
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .primary-button {
@@ -187,6 +220,11 @@ h1 {
 
 .primary-button:hover {
   background: var(--primary-dark);
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .helper-text {
@@ -226,6 +264,24 @@ h1 {
 
 .status-list li[data-state="success"] small {
   color: var(--success);
+}
+
+.status-list li[data-state="processing"] {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: #fffbeb;
+}
+
+.status-list li[data-state="processing"] small {
+  color: var(--warning);
+}
+
+.status-list li[data-state="error"] {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: #fef2f2;
+}
+
+.status-list li[data-state="error"] small {
+  color: var(--danger);
 }
 
 .summary-grid {
@@ -326,6 +382,15 @@ tr:last-child td {
   margin-top: 6px;
 }
 
+.result-output-box pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .error-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -359,7 +424,9 @@ tr:last-child td {
   }
 
   .summary-grid,
-  .error-grid {
+  .error-grid,
+  .form-grid,
+  .form-grid.two-columns {
     grid-template-columns: 1fr;
   }
 

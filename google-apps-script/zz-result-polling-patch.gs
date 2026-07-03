@@ -56,6 +56,121 @@ function doPost(e) {
   }
 }
 
+function parseOrderFile_(uploaded, payload, keepTemporaryFiles) {
+  var fileName = uploaded.fileName;
+  var extension = getFileExtension_(fileName);
+  if (payload.clientWorkbookJson) {
+    return parseClientWorkbookAsRows_(payload.clientWorkbookJson, fileName);
+  }
+  if (extension === 'csv') {
+    return parseCsvContentAsRows_(uploaded.sampleCsvContent || uploaded.blob.getDataAsString('UTF-8'), fileName);
+  }
+  if (extension === 'xlsx' || extension === 'xls') {
+    return parseSpreadsheetBlobAsRows_(uploaded.blob, fileName, keepTemporaryFiles);
+  }
+  throw appError_('UNSUPPORTED_FILE_TYPE', '지원하지 않는 파일 형식입니다. csv, xlsx, xls 파일만 처리할 수 있습니다.');
+}
+
+function parseClientWorkbookAsRows_(clientWorkbookJson, fileName) {
+  var workbook;
+  try {
+    workbook = JSON.parse(String(clientWorkbookJson || '{}'));
+  } catch (error) {
+    throw appError_('CLIENT_WORKBOOK_PARSE_FAILED', '브라우저에서 전달한 엑셀 데이터를 읽지 못했습니다.', error.message);
+  }
+
+  var sourceSheets = workbook.sheets || [];
+  var candidateSheets = [];
+  var sheetNameIndex = {};
+  var warnings = [];
+  var errors = [];
+
+  for (var i = 0; i < sourceSheets.length; i += 1) {
+    var sheetName = String(sourceSheets[i].name || 'Sheet' + (i + 1));
+    var values = normalizeClientSheetValues_(sourceSheets[i].values || []);
+    if (isValuesEmpty_(values)) {
+      continue;
+    }
+    var candidate = inspectSourceSheetCandidate_(sheetName, values);
+    if (candidate) {
+      candidateSheets.push(candidate);
+      sheetNameIndex[candidate.name] = true;
+    }
+  }
+
+  for (var priorityIndex = 0; priorityIndex < SOURCE_SHEET_PRIORITY.length; priorityIndex += 1) {
+    var priorityName = SOURCE_SHEET_PRIORITY[priorityIndex];
+    for (var sheetIndex = 0; sheetIndex < sourceSheets.length; sheetIndex += 1) {
+      var sourceSheet = sourceSheets[sheetIndex];
+      if (String(sourceSheet.name || '') === priorityName && !sheetNameIndex[priorityName]) {
+        var priorityValues = normalizeClientSheetValues_(sourceSheet.values || []);
+        if (!isValuesEmpty_(priorityValues)) {
+          var forcedCandidate = inspectSourceSheetCandidate_(priorityName, priorityValues, true);
+          if (forcedCandidate) {
+            candidateSheets.unshift(forcedCandidate);
+            sheetNameIndex[priorityName] = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (!candidateSheets.length) {
+    throw appError_('SOURCE_SHEET_NOT_FOUND', '운송장/출고일지 후보 시트를 찾지 못했습니다.');
+  }
+
+  var seenNames = {};
+  var uniqueCandidates = [];
+  for (var candidateIndex = 0; candidateIndex < candidateSheets.length; candidateIndex += 1) {
+    if (!seenNames[candidateSheets[candidateIndex].name]) {
+      uniqueCandidates.push(candidateSheets[candidateIndex]);
+      seenNames[candidateSheets[candidateIndex].name] = true;
+    }
+  }
+
+  var parsedSheets = [];
+  for (var parseIndex = 0; parseIndex < uniqueCandidates.length; parseIndex += 1) {
+    var parsedSheet = parseSheetValues_(uniqueCandidates[parseIndex], fileName);
+    parsedSheet.sheetName = uniqueCandidates[parseIndex].name;
+    parsedSheets.push(parsedSheet);
+    warnings = warnings.concat(parsedSheet.warnings);
+    errors = errors.concat(parsedSheet.errors);
+  }
+
+  var selected = selectPrimaryAndValidationSheets_(parsedSheets);
+  var primaryRows = flattenParsedSheetRows_(selected.primarySheets);
+  var comparison = buildSheetComparison_(selected.primarySheets, selected.validationSheets);
+
+  if (selected.validationSheets.length && !comparison.quantityMatched) {
+    errors.push(issue_('QUANTITY_COMPARISON_MISMATCH', '운송장 기준 수량과 출고일지 합산 수량이 일치하지 않아 반영을 중단했습니다.'));
+  }
+
+  return {
+    rows: primaryRows,
+    warnings: warnings,
+    errors: errors,
+    sourceRowCount: primaryRows.length,
+    sourceSheetNames: uniqueCandidates.map(function(candidate) { return candidate.name; }),
+    parsedSheets: parsedSheets.map(function(item) { return buildParsedSheetDebug_(item.sheetName, item); }),
+    comparison: comparison,
+    temporaryFileIds: [],
+    clientParsed: true
+  };
+}
+
+function normalizeClientSheetValues_(values) {
+  var normalized = [];
+  for (var rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
+    var row = values[rowIndex] || [];
+    var normalizedRow = [];
+    for (var colIndex = 0; colIndex < row.length; colIndex += 1) {
+      normalizedRow.push(row[colIndex] === null || row[colIndex] === undefined ? '' : String(row[colIndex]));
+    }
+    normalized.push(normalizedRow);
+  }
+  return normalized;
+}
+
 function getStoredProcessResult_(callbackId) {
   var normalizedCallbackId = sanitizeResultCallbackId_(callbackId);
   if (!normalizedCallbackId) {

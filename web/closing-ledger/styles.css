@@ -206,6 +206,50 @@ h1 {
   font-weight: 700;
 }
 
+.connection-panel {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fafafa;
+}
+
+.connection-panel small {
+  display: block;
+  color: var(--muted);
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.connection-panel strong {
+  display: block;
+  font-size: 17px;
+}
+
+.connection-panel p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.connection-panel[data-state="success"] {
+  border-color: rgba(22, 163, 74, 0.28);
+  background: #f0fdf4;
+}
+
+.connection-panel[data-state="success"] strong {
+  color: var(--success);
+}
+
+.connection-panel[data-state="error"] {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: #fef2f2;
+}
+
+.connection-panel[data-state="error"] strong {
+  color: var(--danger);
+}
+
 .primary-button {
   border: 0;
   border-radius: 16px;

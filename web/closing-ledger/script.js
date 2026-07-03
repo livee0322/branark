@@ -290,8 +290,16 @@ function renderHealthResult(result) {
     setConnectionState('success', '자동화 연결 확인 완료', 'Apps Script 응답과 주요 Google 리소스 접근이 모두 확인되었습니다.');
   } else {
     const missing = (result.missingProperties || []).join(', ');
-    const issueText = missing ? `누락 설정: ${missing}` : '세부 상태 카드를 확인해 주세요.';
-    setConnectionState('error', '자동화 설정 보완 필요', issueText);
+    const pageUploadIssue = pageUpload.userMessage || '';
+    const issueText = missing
+      ? `누락 설정: ${missing}`
+      : pageUploadIssue || '세부 상태 카드를 확인해 주세요.';
+    const issueTitle = pageUpload.issueCode === 'PAGE_UPLOAD_DISABLED'
+      ? '페이지 업로드 미허용'
+      : pageUpload.issueCode === 'PAGE_UPLOAD_ORIGIN_MISMATCH'
+        ? '페이지 Origin 설정 확인 필요'
+        : '자동화 설정 보완 필요';
+    setConnectionState('error', issueTitle, issueText);
   }
 
   setHealthCard(
@@ -324,6 +332,11 @@ function renderHealthResult(result) {
   );
 
   setPricePreviewRows(price.previewRows || [], price.previewMessage || formatPriceResourceDescription(price));
+
+  if (!pageUpload.ok && validateButton) {
+    validateButton.disabled = true;
+    uploadMessage.textContent = pageUpload.userMessage || '페이지 업로드가 허용되지 않았습니다.';
+  }
 }
 
 function formatPriceResourceDescription(price) {
@@ -557,6 +570,8 @@ function formatUserError(error) {
     DAILY_SHEET_ACCESS_FAILED: '일일마감 시트 접근에 실패했습니다. 시트 ID와 공유 권한을 확인해 주세요.',
     DAILY_SHEET_APPEND_FAILED: '일일마감 시트에 테스트 행을 추가하지 못했습니다. 첫 번째 시트와 편집 권한을 확인해 주세요.',
     PRICE_RESOURCE_ACCESS_FAILED: '단가표 접근에 실패했습니다. PRICE_SHEET_ID와 공유 권한을 확인해 주세요.',
+    PAGE_UPLOAD_DISABLED: '페이지 업로드가 허용되지 않았습니다. ALLOW_PAGE_UPLOAD=true 설정이 필요합니다.',
+    PAGE_UPLOAD_ORIGIN_MISMATCH: '페이지 업로드 허용 Origin이 브랜아크 GitHub Pages 주소와 다릅니다. ALLOWED_PAGE_ORIGIN 설정을 확인해 주세요.',
     HEALTH_HTTP_403: 'health check 호출이 거부되었습니다. Apps Script Web App 배포 권한을 확인해 주세요.',
     HEALTH_HTTP_404: 'Apps Script Web App URL을 찾을 수 없습니다. 최신 /exec URL인지 확인해 주세요.',
     HEALTH_HTTP_500: 'Apps Script health check가 서버 오류로 실패했습니다. 배포 버전과 로그를 확인해 주세요.',

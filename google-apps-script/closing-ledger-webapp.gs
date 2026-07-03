@@ -74,7 +74,19 @@ function runHealthCheck_() {
   var dailySheetId = String(props.getProperty('DAILY_SHEET_ID') || '').trim();
   var priceSheetId = String(props.getProperty('PRICE_SHEET_ID') || '').trim();
   var allowPageUpload = String(props.getProperty('ALLOW_PAGE_UPLOAD') || '').toLowerCase() === 'true';
-  var allowedPageOrigin = String(props.getProperty('ALLOWED_PAGE_ORIGIN') || 'https://livee0322.github.io').trim();
+  var expectedPageOrigin = 'https://livee0322.github.io';
+  var allowedPageOrigin = String(props.getProperty('ALLOWED_PAGE_ORIGIN') || expectedPageOrigin).trim();
+  var pageUploadOk = allowPageUpload && allowedPageOrigin === expectedPageOrigin;
+  var pageUploadIssueCode = '';
+  var pageUploadUserMessage = '';
+
+  if (!allowPageUpload) {
+    pageUploadIssueCode = 'PAGE_UPLOAD_DISABLED';
+    pageUploadUserMessage = '페이지 업로드가 허용되지 않았습니다. ALLOW_PAGE_UPLOAD=true 설정이 필요합니다.';
+  } else if (allowedPageOrigin !== expectedPageOrigin) {
+    pageUploadIssueCode = 'PAGE_UPLOAD_ORIGIN_MISMATCH';
+    pageUploadUserMessage = '페이지 업로드 허용 Origin이 브랜아크 GitHub Pages 주소와 다릅니다.';
+  }
 
   if (!apiToken) {
     missingProperties.push('API_TOKEN');
@@ -101,13 +113,17 @@ function runHealthCheck_() {
     apiTokenConfigured: Boolean(apiToken),
     missingProperties: missingProperties,
     pageUpload: {
+      ok: pageUploadOk,
       allowPageUpload: allowPageUpload,
       allowedPageOrigin: allowedPageOrigin,
+      expectedPageOrigin: expectedPageOrigin,
+      issueCode: pageUploadIssueCode,
+      userMessage: pageUploadUserMessage,
     },
     drive: driveStatus,
     dailySheet: dailySheetStatus,
     price: priceStatus,
-    healthOk: missingProperties.length === 0 && driveStatus.ok && dailySheetStatus.ok && priceStatus.ok,
+    healthOk: missingProperties.length === 0 && pageUploadOk && driveStatus.ok && dailySheetStatus.ok && priceStatus.ok,
   };
 }
 

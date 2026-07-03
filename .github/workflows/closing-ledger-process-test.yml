@@ -132,8 +132,19 @@ jobs:
           }
 
           if mode == "sample_csv":
+              sample_csv = os.environ["SAMPLE_CSV_CONTENT"].strip()
+              if "\\n" in sample_csv and "\n" not in sample_csv:
+                  sample_csv = sample_csv.replace("\\n", "\n")
+              if "상품명" not in sample_csv or "수량" not in sample_csv:
+                  sample_csv = "\n".join([
+                      "주문일,판매처,주문번호,상품명,수량",
+                      "2026-07-03,브랜아크몰,ORDER-1001,김밥집 궁채 2kg_2,1",
+                      "2026-07-03,브랜아크몰,ORDER-1002,아삭아삭 궁채장아찌 10KG,3",
+                  ])
+              print("Sample CSV content:")
+              print(sample_csv)
               payload["mode"] = "sample-csv-test"
-              payload["sampleCsvContent"] = os.environ["SAMPLE_CSV_CONTENT"]
+              payload["sampleCsvContent"] = sample_csv
               payload["fileMimeType"] = "text/csv"
           elif mode == "manual_payload":
               payload["mode"] = "manual-test"

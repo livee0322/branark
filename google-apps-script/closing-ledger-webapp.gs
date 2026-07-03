@@ -12,6 +12,10 @@
  * - DRIVE_FOLDER_ID
  * - DAILY_SHEET_ID
  * - PRICE_SHEET_ID
+ *
+ * index.html에서 URL/Token 입력 없이 사용하려면 아래 값도 설정합니다.
+ * - ALLOW_PAGE_UPLOAD=true
+ * - ALLOWED_PAGE_ORIGIN=https://livee0322.github.io
  */
 function doGet(e) {
   var params = e && e.parameter ? e.parameter : {};
@@ -73,16 +77,26 @@ function doPost(e) {
 
 function handlePayload_(payload, props) {
   var expectedToken = props.getProperty('API_TOKEN');
+  var allowPageUpload = String(props.getProperty('ALLOW_PAGE_UPLOAD') || '').toLowerCase() === 'true';
+  var allowedPageOrigin = String(props.getProperty('ALLOWED_PAGE_ORIGIN') || 'https://livee0322.github.io').trim();
+  var isPageUpload = payload.source === 'branark-index-html';
+
+  if (payload.apiToken && expectedToken && payload.apiToken === expectedToken) {
+    return runClosingLedgerProcess_(payload, props);
+  }
+
+  if (isPageUpload && allowPageUpload) {
+    if (allowedPageOrigin && payload.pageOrigin !== allowedPageOrigin) {
+      throw new Error('INVALID_PAGE_ORIGIN: 허용된 브랜아크 페이지에서 실행한 요청이 아닙니다.');
+    }
+    return runClosingLedgerProcess_(payload, props);
+  }
 
   if (!expectedToken) {
     throw new Error('API_TOKEN script property가 비어 있습니다.');
   }
 
-  if (payload.apiToken !== expectedToken) {
-    throw new Error('INVALID_API_TOKEN');
-  }
-
-  return runClosingLedgerProcess_(payload, props);
+  throw new Error('INVALID_API_TOKEN');
 }
 
 function runClosingLedgerProcess_(payload, props) {

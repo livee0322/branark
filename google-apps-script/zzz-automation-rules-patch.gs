@@ -48,8 +48,8 @@ function parseClientWorkbookAsRows_(clientWorkbookJson, fileName) {
     parsedSheet.sheetName = uniqueCandidates[parseIndex].name;
     parsedSheet.sheetKind = getClosingLedgerSheetKind_(uniqueCandidates[parseIndex].name);
     parsedSheets.push(parsedSheet);
-    warnings = warnings.concat(parsedSheet.warnings);
-    errors = errors.concat(parsedSheet.errors);
+    warnings = warnings.concat(parsedSheet.warnings || []);
+    errors = errors.concat(parsedSheet.errors || []);
   }
 
   var selected = selectPrimaryAndValidationSheets_(parsedSheets);
@@ -121,7 +121,7 @@ function parseSheetValues_(sheetData, fileName) {
     var normalizedOption = normalizeSpecText_(optionName);
     var finalQuantity = quantityValue * normalized.quantityMultiplier;
     var amountValue = toNumberStrict_(amountText);
-    var orderDate = orderDateText ? normalizeOrderDate_(orderDateText, fileName) : (sheetDate || normalizeOrderDate_('', fileName));
+    var orderDate = orderDateText ? normalizeClosingDateValue_(orderDateText, fileName) : (sheetDate || normalizeOrderDate_('', fileName));
 
     rows.push({
       sourceSheetName: sheetData.name,
@@ -140,42 +140,24 @@ function parseSheetValues_(sheetData, fileName) {
     });
   }
 
-  return {
-    rows: rows,
-    warnings: warnings,
-    errors: errors,
-    sourceRowCount: rows.length,
-    headerRowNumber: headerInfo ? headerInfo.headerRowNumber : null,
-    columns: headerInfo ? headerInfo.columns : {},
-    sheetDate: sheetDate
-  };
+  return { rows: rows, warnings: warnings, errors: errors, sourceRowCount: rows.length, headerRowNumber: headerInfo.headerRowNumber, columns: headerInfo.columns, sheetDate: sheetDate };
 }
 
 function selectPrimaryAndValidationSheets_(parsedSheets) {
   var waybillSheets = [];
   var shipmentSheets = [];
   var otherSheets = [];
-
   for (var i = 0; i < parsedSheets.length; i += 1) {
     var kind = getClosingLedgerSheetKind_(parsedSheets[i].sheetName);
-    if (kind === 'waybill') {
-      waybillSheets.push(parsedSheets[i]);
-    } else if (kind === 'shipment-ledger') {
-      shipmentSheets.push(parsedSheets[i]);
-    } else {
-      otherSheets.push(parsedSheets[i]);
-    }
+    if (kind === 'waybill') waybillSheets.push(parsedSheets[i]);
+    else if (kind === 'shipment-ledger') shipmentSheets.push(parsedSheets[i]);
+    else otherSheets.push(parsedSheets[i]);
   }
-
   if (shipmentSheets.length) {
     shipmentSheets.sort(function(a, b) { return a.sheetName > b.sheetName ? 1 : -1; });
     return { primarySheets: shipmentSheets, validationSheets: waybillSheets, primaryMode: 'shipment-ledger' };
   }
-
-  if (waybillSheets.length) {
-    return { primarySheets: [waybillSheets[0]], validationSheets: otherSheets, primaryMode: 'waybill' };
-  }
-
+  if (waybillSheets.length) return { primarySheets: [waybillSheets[0]], validationSheets: otherSheets, primaryMode: 'waybill' };
   return { primarySheets: parsedSheets.slice(0, 1), validationSheets: parsedSheets.slice(1), primaryMode: 'fallback' };
 }
 
@@ -188,15 +170,10 @@ function buildShippingRowsFromWaybill_(shipmentSheets, candidateSheets) {
       break;
     }
   }
-
-  if (!waybillCandidate) {
-    return { rows: [], warnings: [issue_('WAYBILL_SHEET_NOT_FOUND_FOR_SHIPPING', '택배발송 수량 계산용 운송장 시트를 찾지 못했습니다.')] };
-  }
+  if (!waybillCandidate) return { rows: [], warnings: [issue_('WAYBILL_SHEET_NOT_FOUND_FOR_SHIPPING', '택배발송 수량 계산용 운송장 시트를 찾지 못했습니다.')] };
 
   var waybillRows = extractWaybillProductRows_(waybillCandidate);
-  if (!waybillRows.length) {
-    return { rows: [], warnings: [issue_('WAYBILL_ROWS_NOT_FOUND_FOR_SHIPPING', '운송장번호가 있는 운송장 행을 찾지 못했습니다.')] };
-  }
+  if (!waybillRows.length) return { rows: [], warnings: [issue_('WAYBILL_ROWS_NOT_FOUND_FOR_SHIPPING', '운송장번호가 있는 운송장 행을 찾지 못했습니다.')] };
 
   var shippingRows = [];
   for (var sheetIndex = 0; sheetIndex < shipmentSheets.length; sheetIndex += 1) {
@@ -208,37 +185,18 @@ function buildShippingRowsFromWaybill_(shipmentSheets, candidateSheets) {
       if (!orderDate && row.orderDate) orderDate = row.orderDate;
       productSet[normalizeLooseText_(row.normalizedProductName || row.rawProductName)] = true;
     }
-
     var waybillSet = {};
     for (var waybillIndex = 0; waybillIndex < waybillRows.length; waybillIndex += 1) {
       var waybillRow = waybillRows[waybillIndex];
-      if (productSet[waybillRow.compactProductName]) {
-        waybillSet[waybillRow.waybillNumber] = true;
-      }
+      if (productSet[waybillRow.compactProductName]) waybillSet[waybillRow.waybillNumber] = true;
     }
-
     var count = Object.keys(waybillSet).length;
     if (count > 0) {
-      shippingRows.push({
-        sourceSheetName: shipment.sheetName,
-        sourceRowNumber: null,
-        orderDate: orderDate || normalizeOrderDate_('', ''),
-        orderNumber: '',
-        salesChannel: '',
-        rawProductName: '택배발송',
-        optionName: '',
-        normalizedProductName: '택배발송',
-        compactProductName: normalizeLooseText_('택배발송'),
-        normalizedOptionName: '',
-        compactOptionName: '',
-        quantity: count,
-        amount: null
-      });
+      shippingRows.push({ sourceSheetName: shipment.sheetName, sourceRowNumber: null, orderDate: orderDate || normalizeOrderDate_('', ''), orderNumber: '', salesChannel: '', rawProductName: '택배발송', optionName: '', normalizedProductName: '택배발송', compactProductName: normalizeLooseText_('택배발송'), normalizedOptionName: '', compactOptionName: '', quantity: count, amount: null });
     } else {
       warnings.push(issue_('SHIPPING_COUNT_EMPTY', shipment.sheetName + ' 기준 택배발송 수량을 계산하지 못했습니다.'));
     }
   }
-
   return { rows: shippingRows, warnings: warnings };
 }
 
@@ -246,10 +204,8 @@ function extractWaybillProductRows_(candidate) {
   var values = candidate.values || [];
   var headerInfo = candidate.headerInfo || detectHeaderRowAndColumns_(values, SOURCE_HEADER_ALIASES, ['productName', 'quantity']);
   if (!headerInfo) return [];
-
   var waybillColumn = findHeaderColumn_(values[headerInfo.headerRowIndex], ['운송장번호', '송장번호', '운송장']);
   if (waybillColumn === null) return [];
-
   var rows = [];
   for (var rowIndex = headerInfo.headerRowIndex + 1; rowIndex < values.length; rowIndex += 1) {
     var row = values[rowIndex];
@@ -258,15 +214,11 @@ function extractWaybillProductRows_(candidate) {
     var waybillNumber = getRowCell_(row, waybillColumn);
     if (!rawProductName || !waybillNumber) continue;
     var normalized = normalizeProductName_(rawProductName);
-    rows.push({
-      rawProductName: rawProductName,
-      normalizedProductName: normalized.name,
-      compactProductName: normalizeLooseText_(normalized.name),
-      waybillNumber: waybillNumber
-    });
+    rows.push({ rawProductName: rawProductName, normalizedProductName: normalized.name, compactProductName: normalizeLooseText_(normalized.name), waybillNumber: waybillNumber });
   }
   return rows;
-}\n
+}
+
 function matchPrices_(rows, priceSheetId, keepTemporaryFiles) {
   var priceResource = readPriceResource_(priceSheetId, keepTemporaryFiles);
   var resultRows = [];
@@ -276,7 +228,6 @@ function matchPrices_(rows, priceSheetId, keepTemporaryFiles) {
   var matchedCount = 0;
   var unmatchedCount = 0;
   var unmatchedItems = [];
-
   for (var i = 0; i < rows.length; i += 1) {
     var item = rows[i];
     var matched = findPriceMatch_(item, priceResource);
@@ -287,19 +238,14 @@ function matchPrices_(rows, priceSheetId, keepTemporaryFiles) {
       priceMatches.push({ orderProductName: item.productName, normalizedOrderProductName: item.normalizedProductName, priceProductName: '', priceSpec: '', quantity: item.quantity, matched: false, matchedBy: '', supplyPrice: null, vat: null, totalPrice: null, status: '확인 필요' });
       continue;
     }
-
     matchedCount += 1;
     var closingSupplyPrice = calculateClosingSupplyPrice_(matched.record);
     var displayName = getClosingLedgerDisplayName_(item, matched.record);
     var memo = item.memoBase + ' / 처리 시각: ' + formatNow_();
-    if (matched.by === 'supplemental-rule') {
-      warnings.push(issue_('SUPPLEMENTAL_PRICE_USED', '공급단가표 보완 규칙을 사용했습니다: ' + displayName + ' / ' + matched.record.spec));
-    }
-
+    if (matched.by === 'supplemental-rule') warnings.push(issue_('SUPPLEMENTAL_PRICE_USED', '공급단가표 보완 규칙을 사용했습니다: ' + displayName + ' / ' + matched.record.spec));
     resultRows.push({ orderDate: item.orderDate, productName: item.productName, normalizedProductName: displayName, priceProductName: matched.record.productName, priceSpec: matched.record.spec, quantity: item.quantity, supplyPrice: closingSupplyPrice, totalPrice: item.quantity * closingSupplyPrice, memo: memo, sourceSheetName: item.sourceSheetNames.join(', ') });
     priceMatches.push({ orderProductName: item.productName, normalizedOrderProductName: displayName, priceProductName: matched.record.productName, priceSpec: matched.record.spec, quantity: item.quantity, matched: true, matchedBy: matched.by, basePrice: matched.record.supplyPrice, supplyPrice: closingSupplyPrice, vat: matched.record.vat, totalPrice: item.quantity * closingSupplyPrice, status: matched.by === 'product+spec' ? '정상 매칭' : (matched.by === 'supplemental-rule' ? '보완 규칙 매칭' : '상품명 기준 매칭') });
   }
-
   return { rows: resultRows, priceMatches: priceMatches, matchedCount: matchedCount, unmatchedCount: unmatchedCount, warnings: warnings, errors: errors, temporaryFileIds: priceResource.temporaryFileIds, debug: { priceSheetId: priceResource.id, priceSheetName: priceResource.name, priceSheetType: priceResource.type, priceSheetTabName: priceResource.sheetName, headerRowNumber: priceResource.headerRowNumber, columns: priceResource.columns, temporaryFileIds: priceResource.temporaryFileIds, unmatchedItems: unmatchedItems } };
 }
 
@@ -309,13 +255,11 @@ function findPriceMatch_(item, priceResource) {
     var combinedRecord = priceResource.combinedMap[productSpecCandidates[i]];
     if (combinedRecord) return { record: combinedRecord, by: 'product+spec' };
   }
-
   var productOnlyCandidates = buildProductMatchSignatures_(item.productName, '').concat(buildProductMatchSignatures_(item.normalizedProductName, ''));
   for (var j = 0; j < productOnlyCandidates.length; j += 1) {
     var productRecord = priceResource.productMap[productOnlyCandidates[j]];
     if (productRecord) return { record: productRecord, by: 'product-only' };
   }
-
   var supplemental = findSupplementalPriceRule_(item);
   if (supplemental) return { record: supplemental, by: 'supplemental-rule' };
   return null;
@@ -351,9 +295,7 @@ function findSupplementalPriceRule_(item) {
   for (var i = 0; i < BRANARK_SUPPLEMENTAL_PRICE_RULES.length; i += 1) {
     var rule = BRANARK_SUPPLEMENTAL_PRICE_RULES[i];
     for (var aliasIndex = 0; aliasIndex < rule.aliases.length; aliasIndex += 1) {
-      if (signatures.indexOf(normalizeLooseText_(rule.aliases[aliasIndex])) >= 0) {
-        return { productName: rule.productName, spec: rule.spec, supplyPrice: rule.supplyPrice, vat: rule.vat, closingSupplyPrice: rule.closingSupplyPrice, supplemental: true };
-      }
+      if (signatures.indexOf(normalizeLooseText_(rule.aliases[aliasIndex])) >= 0) return { productName: rule.productName, spec: rule.spec, supplyPrice: rule.supplyPrice, vat: rule.vat, closingSupplyPrice: rule.closingSupplyPrice, supplemental: true };
     }
   }
   return null;
@@ -402,6 +344,11 @@ function normalizeClosingDateValue_(value, fileName) {
   if (isFinite(serial) && serial > 30000 && serial < 60000) {
     var date = new Date(Math.round((serial - 25569) * 86400000));
     return Utilities.formatDate(date, TIMEZONE, 'yyyy-MM-dd');
+  }
+  var slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (slash) {
+    var year = slash[3].length === 2 ? '20' + slash[3] : slash[3];
+    return year + '-' + pad2_(slash[1]) + '-' + pad2_(slash[2]);
   }
   var normalized = normalizeOrderDate_(text, fileName);
   return normalized === text && text.length < 6 ? '' : normalized;

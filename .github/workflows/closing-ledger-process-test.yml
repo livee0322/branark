@@ -58,6 +58,8 @@ jobs:
       - name: Create Drive test file and append daily sheet row
         run: |
           python - <<'PY'
+          import base64
+          import binascii
           import io
           import json
           import os
@@ -65,6 +67,56 @@ jobs:
           from google.oauth2 import service_account
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaIoBaseUpload
+
+          def load_service_account_info(raw_value: str) -> dict:
+              raw = (raw_value or "").strip()
+
+              if not raw:
+                  raise SystemExit("GOOGLE_SERVICE_ACCOUNT_JSON 값이 비어 있습니다.")
+
+              if raw.startswith("GOOGLE_SERVICE_ACCOUNT_JSON="):
+                  raw = raw.split("=", 1)[1].strip()
+                  print("GOOGLE_SERVICE_ACCOUNT_JSON 앞의 변수명 prefix를 제거하고 다시 읽습니다.")
+
+              if raw.startswith("export GOOGLE_SERVICE_ACCOUNT_JSON="):
+                  raw = raw.split("=", 1)[1].strip()
+                  print("export prefix를 제거하고 다시 읽습니다.")
+
+              def parse_json(value: str):
+                  parsed = json.loads(value)
+                  if isinstance(parsed, str):
+                      parsed = json.loads(parsed)
+                  return parsed
+
+              try:
+                  info = parse_json(raw)
+              except json.JSONDecodeError as first_error:
+                  try:
+                      decoded = base64.b64decode(raw).decode("utf-8").strip()
+                      info = parse_json(decoded)
+                      print("GOOGLE_SERVICE_ACCOUNT_JSON 값을 base64로 해석해 읽었습니다.")
+                  except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError):
+                      preview_start = raw[:20].replace("\n", "\\n")
+                      preview_end = raw[-20:].replace("\n", "\\n")
+                      print("GOOGLE_SERVICE_ACCOUNT_JSON 형식 오류")
+                      print(f"- 시작 일부: {preview_start}")
+                      print(f"- 끝 일부: {preview_end}")
+                      print(f"- JSON 오류: {first_error}")
+                      raise SystemExit(
+                          "GOOGLE_SERVICE_ACCOUNT_JSON에는 변수명 없이 서비스 계정 JSON 본문 전체만 넣어야 합니다. "
+                          "값은 { 로 시작해서 } 로 끝나야 합니다."
+                      )
+
+              if not isinstance(info, dict):
+                  raise SystemExit("GOOGLE_SERVICE_ACCOUNT_JSON을 읽었지만 JSON object 형식이 아닙니다.")
+
+              required_keys = ["type", "client_email", "token_uri"]
+              missing_keys = [key for key in required_keys if key not in info]
+              if missing_keys:
+                  raise SystemExit("서비스 계정 JSON 필수 키 누락: " + ", ".join(missing_keys))
+
+              print("Google service account JSON 형식 확인 완료:", info.get("client_email"))
+              return info
 
           required = [
               "GOOGLE_SERVICE_ACCOUNT_JSON",
@@ -76,7 +128,7 @@ jobs:
           if missing:
               raise SystemExit("필수 설정값 누락: " + ", ".join(missing))
 
-          info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+          info = load_service_account_info(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
           credentials = service_account.Credentials.from_service_account_info(
               info,
               scopes=[

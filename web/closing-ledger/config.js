@@ -8,7 +8,7 @@ window.BRANARK_CLOSING_LEDGER_CONFIG = {
 window.setTimeout(function () {
   if (document.querySelector('script[data-branark-upload-patch="true"]')) return;
   var patchScript = document.createElement('scr' + 'ipt');
-  patchScript.src = './web/closing-ledger/upload-patch.js?v=20260703-8';
+  patchScript.src = './web/closing-ledger/upload-patch.js?v=20260703-9';
   patchScript.dataset.branarkUploadPatch = 'true';
   document.body.appendChild(patchScript);
 }, 1000);

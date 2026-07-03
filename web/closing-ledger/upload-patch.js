@@ -3,6 +3,8 @@
   const requestTimeoutMs = Number(runtimeConfig.requestTimeoutMs || 180000);
   const pollIntervalMs = 3000;
   const appsScriptWebAppUrl = String(runtimeConfig.appsScriptWebAppUrl || '').trim();
+  const xlsxLibraryUrl = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  let xlsxLibraryPromise = null;
 
   function qs(selector) {
     return document.querySelector(selector);
@@ -42,6 +44,10 @@
     if (node) node.textContent = prettyJson(value || {});
   }
 
+  function getFileExtension(fileName) {
+    return String(fileName || '').includes('.') ? String(fileName).split('.').pop().toLowerCase() : '';
+  }
+
   function mapAppsScriptUploadError(payload) {
     const error = new Error(payload?.userMessage || payload?.error || payload?.message || 'Apps Script 처리 중 오류가 발생했습니다.');
     error.code = payload?.errorCode || payload?.code || '';
@@ -50,6 +56,48 @@
     error.errors = payload?.errors || [];
     error.payload = payload;
     return error;
+  }
+
+  function loadXlsxLibrary() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxLibraryPromise) return xlsxLibraryPromise;
+    xlsxLibraryPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = xlsxLibraryUrl;
+      script.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('XLSX_LIBRARY_NOT_LOADED'));
+      script.onerror = () => reject(new Error('XLSX_LIBRARY_LOAD_FAILED'));
+      document.head.appendChild(script);
+    });
+    return xlsxLibraryPromise;
+  }
+
+  async function addClientWorkbookPayload(payload) {
+    const extension = getFileExtension(payload.fileName);
+    if (!['xlsx', 'xls'].includes(extension) || !payload.fileBase64) {
+      return payload;
+    }
+
+    setUploadMessage('엑셀 파일 내용을 브라우저에서 먼저 읽고 있습니다.');
+    const XLSX = await loadXlsxLibrary();
+    const workbook = XLSX.read(payload.fileBase64, { type: 'base64', cellDates: false, raw: false });
+    const sheets = workbook.SheetNames.map((sheetName) => {
+      const values = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+        header: 1,
+        raw: false,
+        defval: '',
+        blankrows: false,
+      });
+      return {
+        name: sheetName,
+        values,
+      };
+    }).filter((sheet) => sheet.values && sheet.values.length);
+
+    return {
+      ...payload,
+      clientWorkbookParsedInBrowser: true,
+      clientWorkbookJson: JSON.stringify({ sheets }),
+    };
   }
 
   function fetchJsonp(url, params) {
@@ -86,7 +134,7 @@
   }
 
   function patchedSubmitToAppsScript(url, payload) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const callbackId = `branark_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const iframeName = `${callbackId}_frame`;
       const iframe = document.createElement('iframe');
@@ -185,6 +233,13 @@
           return;
         }
         finishWithError(data);
+      }
+
+      try {
+        payload = await addClientWorkbookPayload(payload);
+      } catch (error) {
+        finishWithError({ code: 'CLIENT_EXCEL_PARSE_FAILED', message: '브라우저에서 엑셀 파일을 읽지 못했습니다.', details: error.message || String(error) });
+        return;
       }
 
       window.addEventListener('message', onMessage, false);

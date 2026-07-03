@@ -8,10 +8,10 @@ const resultOutput = document.querySelector('#resultOutput');
 const validateButton = document.querySelector('#validateButton');
 const uploadMessage = document.querySelector('#uploadMessage');
 const statusItems = Array.from(document.querySelectorAll('#statusList li'));
+const connectionPanel = document.querySelector('#connectionPanel');
+const connectionStatus = document.querySelector('#connectionStatus');
+const connectionDescription = document.querySelector('#connectionDescription');
 
-const appsScriptUrlInput = document.querySelector('#appsScriptUrl');
-const appsScriptTokenInput = document.querySelector('#appsScriptToken');
-const rememberSettingsInput = document.querySelector('#rememberSettings');
 const orderDateInput = document.querySelector('#orderDate');
 const productNameInput = document.querySelector('#productName');
 const quantityInput = document.querySelector('#quantity');
@@ -19,7 +19,8 @@ const supplyPriceInput = document.querySelector('#supplyPrice');
 const allowDuplicateInput = document.querySelector('#allowDuplicateFile');
 
 const allowedExtensions = ['xlsx', 'xls', 'csv'];
-const storageKey = 'branarkClosingLedgerAppsScriptUrl';
+const runtimeConfig = window.BRANARK_CLOSING_LEDGER_CONFIG || {};
+const appsScriptWebAppUrl = String(runtimeConfig.appsScriptWebAppUrl || '').trim();
 
 function getExtension(name) {
   return name.split('.').pop().toLowerCase();
@@ -49,16 +50,30 @@ function setToday() {
   }
 }
 
-function restoreSettings() {
-  const savedUrl = window.localStorage.getItem(storageKey);
-  if (savedUrl && appsScriptUrlInput) {
-    appsScriptUrlInput.value = savedUrl;
-    rememberSettingsInput.checked = true;
+function validateAutomationConfig() {
+  if (!appsScriptWebAppUrl) {
+    connectionPanel.dataset.state = 'error';
+    connectionStatus.textContent = 'Apps Script URL 미설정';
+    connectionDescription.textContent = 'web/closing-ledger/config.js에 Apps Script /exec URL을 1회 입력해야 합니다.';
+    validateButton.disabled = true;
+    uploadMessage.textContent = '자동화 연결 URL이 아직 설정되지 않았습니다. 관리자 설정 후 사용할 수 있습니다.';
+    return false;
   }
-}
 
-function normalizeAppsScriptUrl(url) {
-  return String(url || '').trim();
+  if (!appsScriptWebAppUrl.startsWith('https://script.google.com/') || !appsScriptWebAppUrl.includes('/exec')) {
+    connectionPanel.dataset.state = 'error';
+    connectionStatus.textContent = 'Apps Script URL 형식 오류';
+    connectionDescription.textContent = 'Apps Script Web App URL은 https://script.google.com/.../exec 형식이어야 합니다.';
+    validateButton.disabled = true;
+    uploadMessage.textContent = 'Apps Script Web App URL 형식이 올바르지 않습니다.';
+    return false;
+  }
+
+  connectionPanel.dataset.state = 'success';
+  connectionStatus.textContent = '브랜아크 자동화 연결됨';
+  connectionDescription.textContent = '발주서 파일을 선택하면 설정된 Apps Script로 자동 전송됩니다.';
+  validateButton.disabled = false;
+  return true;
 }
 
 function readFileAsBase64(file) {
@@ -120,6 +135,8 @@ function submitToAppsScript(url, payload) {
     const fields = {
       responseMode: 'postMessage',
       callbackId,
+      source: 'branark-index-html',
+      pageOrigin: window.location.origin,
       ...payload,
     };
 
@@ -154,7 +171,7 @@ fileInput.addEventListener('change', () => {
   if (!file) {
     fileName.textContent = '파일을 선택하세요';
     resultFileName.textContent = '-';
-    uploadMessage.textContent = 'Apps Script Web App URL, API Token, 파일을 입력한 뒤 실행하세요.';
+    uploadMessage.textContent = '파일을 선택한 뒤 실행하세요. Apps Script 연결값은 자동으로 사용됩니다.';
     return;
   }
 
@@ -168,29 +185,19 @@ fileInput.addEventListener('change', () => {
     return;
   }
 
-  uploadMessage.textContent = '파일 형식은 정상입니다. Apps Script로 업로드 및 시트 작성을 실행할 수 있습니다.';
+  uploadMessage.textContent = '파일 형식은 정상입니다. 발주서 업로드 및 일일마감 작성을 실행할 수 있습니다.';
   setStatus(0, 'success', '성공');
 });
 
 validateButton.addEventListener('click', async () => {
   const file = fileInput.files?.[0];
-  const url = normalizeAppsScriptUrl(appsScriptUrlInput.value);
-  const apiToken = appsScriptTokenInput.value.trim();
 
   resetStatus();
   resultOutput.textContent = '처리 중입니다...';
 
   try {
-    if (!url) {
-      throw new Error('Apps Script Web App URL을 입력해주세요.');
-    }
-
-    if (!url.startsWith('https://script.google.com/') || !url.includes('/exec')) {
-      throw new Error('Apps Script Web App URL은 https://script.google.com/.../exec 형식이어야 합니다.');
-    }
-
-    if (!apiToken) {
-      throw new Error('API Token을 입력해주세요.');
+    if (!validateAutomationConfig()) {
+      throw new Error('Apps Script 자동화 연결 설정이 필요합니다.');
     }
 
     if (!file) {
@@ -217,15 +224,9 @@ validateButton.addEventListener('click', async () => {
     validateButton.disabled = true;
     validateButton.textContent = '처리 중...';
 
-    if (rememberSettingsInput.checked) {
-      window.localStorage.setItem(storageKey, url);
-    } else {
-      window.localStorage.removeItem(storageKey);
-    }
-
     setStatus(0, 'success', '성공');
     setStatus(1, 'processing', '연결 중');
-    uploadMessage.textContent = '파일을 읽고 Apps Script로 전송 중입니다.';
+    uploadMessage.textContent = '파일을 읽고 브랜아크 Apps Script로 전송 중입니다.';
 
     const fileBase64 = await readFileAsBase64(file);
 
@@ -233,9 +234,7 @@ validateButton.addEventListener('click', async () => {
     setStatus(2, 'processing', '확인 중');
     setStatus(3, 'processing', '업로드 중');
 
-    const result = await submitToAppsScript(url, {
-      apiToken,
-      testFileName: file.name,
+    const result = await submitToAppsScript(appsScriptWebAppUrl, {
       fileName: file.name,
       fileMimeType: file.type || 'application/octet-stream',
       fileBase64,
@@ -268,9 +267,10 @@ validateButton.addEventListener('click', async () => {
     }
   } finally {
     validateButton.disabled = false;
-    validateButton.textContent = 'Apps Script로 업로드 및 시트 작성';
+    validateButton.textContent = '발주서 업로드 및 일일마감 작성';
+    validateAutomationConfig();
   }
 });
 
 setToday();
-restoreSettings();
+validateAutomationConfig();

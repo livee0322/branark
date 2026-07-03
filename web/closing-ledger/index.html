@@ -3,68 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>브랜아크 일일마감 자동화</title>
+  <title>브랜아크 발주서 일일마감 자동화</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <main class="page-shell">
     <section class="hero-card">
       <p class="eyebrow">BRANARK CLOSING LEDGER AUTOMATION</p>
-      <h1>브랜아크 발주서 업로드 및 일일마감 자동화</h1>
-      <p class="hero-copy">브랜아크 운영팀이 발주서 파일을 업로드하고, 실제 자동화 연결 상태와 테스트 반영 결과를 한 화면에서 확인하는 전용 페이지입니다.</p>
+      <h1>브랜아크 발주서 파일 분석 및 일일마감 자동 반영</h1>
+      <p class="hero-copy">발주서 파일을 업로드하면 브랜아크 전용 Apps Script가 파일을 저장하고, 시트를 읽고, 단가표를 대조한 뒤 일일마감 반영 예정 행까지 정리합니다.</p>
     </section>
 
     <section class="notice-card">
-      <strong>현재 기능 범위</strong>
-      <p>지금 단계에서는 발주서 파일을 Google Drive에 저장하고, 화면 입력값으로 일일 마감 양식 첫 번째 시트에 테스트 행 1건을 추가합니다. 실제 엑셀 발주서 분석은 아직 포함되지 않습니다.</p>
-    </section>
-
-    <section class="card">
-      <div class="section-title">
-        <span>0</span>
-        <div>
-          <h2>자동화 연결 점검</h2>
-          <p>페이지 로드 시 Apps Script health check를 실행해 Drive, 일일마감 시트, 단가표 접근 상태를 실제 응답 기준으로 표시합니다.</p>
-        </div>
-      </div>
-
-      <div class="connection-panel" id="connectionPanel" data-state="loading">
-        <div>
-          <small>Apps Script 연결 상태</small>
-          <strong id="connectionStatus">점검 중</strong>
-        </div>
-        <p id="connectionDescription">브랜아크 Apps Script 응답과 Google 리소스 접근 상태를 확인하고 있습니다.</p>
-      </div>
-
-      <div class="health-grid" id="healthGrid">
-        <article class="health-card" id="healthDriveCard" data-state="waiting">
-          <small>Google Drive</small>
-          <strong id="healthDriveTitle">확인 전</strong>
-          <p id="healthDriveDescription">발주서 저장 폴더 접근 상태를 점검합니다.</p>
-        </article>
-        <article class="health-card" id="healthDailySheetCard" data-state="waiting">
-          <small>일일마감 시트</small>
-          <strong id="healthDailySheetTitle">확인 전</strong>
-          <p id="healthDailySheetDescription">테스트 행을 추가할 첫 번째 시트를 점검합니다.</p>
-        </article>
-        <article class="health-card" id="healthPriceCard" data-state="waiting">
-          <small>단가표</small>
-          <strong id="healthPriceTitle">확인 전</strong>
-          <p id="healthPriceDescription">단가표 파일 또는 시트 접근 상태를 점검합니다.</p>
-        </article>
-      </div>
-
-      <div class="summary-grid compact-grid">
-        <div><small>health check 시각</small><strong id="healthCheckedAt">-</strong></div>
-        <div><small>페이지 업로드 허용</small><strong id="healthAllowPageUpload">-</strong></div>
-        <div><small>허용 Origin</small><strong id="healthAllowedOrigin">-</strong></div>
-        <div><small>API_TOKEN 설정 여부</small><strong id="healthApiToken">-</strong></div>
-      </div>
-
-      <div class="rule-box">
-        <strong>운영 메모</strong>
-        <p>이 화면은 URL 문자열만 보고 연결 성공을 표시하지 않습니다. Apps Script가 실제로 응답하고, 필요한 Drive/Sheet/단가표 설정이 모두 접근 가능할 때만 정상으로 표시합니다.</p>
-        <p>설정이 빠진 경우 누락 항목과 실패 사유를 바로 아래와 업로드 결과 영역에서 함께 안내합니다.</p>
+      <strong>안내</strong>
+      <div>
+        <p>현재 운영 기본값은 자동 분석 모드입니다. 상품명, 수량, 공급단가를 화면에서 따로 입력하지 않고 파일 내용으로만 처리합니다.</p>
+        <p>금액은 공급단가표를 기준으로 검증하며, 단가표에서 찾지 못한 상품이나 수량 불일치가 있으면 일일마감 반영을 차단합니다.</p>
       </div>
     </section>
 
@@ -72,54 +26,62 @@
       <div class="section-title">
         <span>1</span>
         <div>
-          <h2>처리 흐름 정리</h2>
-          <p>최종 자동화 이전 단계이므로, 현재 페이지가 실제로 무엇을 하고 무엇은 아직 하지 않는지 명확히 구분해 보여줍니다.</p>
+          <h2>자동화 연결 상태</h2>
+          <p>페이지를 열면 health check를 실행해 Drive, 일일마감 시트, 단가표, 페이지 업로드 허용 상태를 실제 응답으로 확인합니다.</p>
         </div>
       </div>
 
-      <ol class="status-list static-flow">
-        <li data-state="success"><b>1. 발주서 파일 선택</b><small>xlsx / xls / csv, 8MB 이하</small></li>
-        <li data-state="success"><b>2. 화면 입력값 검증</b><small>주문일, 상품명, 수량, 공급단가 확인</small></li>
-        <li data-state="success"><b>3. Apps Script로 파일 전송</b><small>hidden iframe / form POST 유지</small></li>
-        <li data-state="success"><b>4. Google Drive에 발주서 저장</b><small>중복 파일명 정책 반영</small></li>
-        <li data-state="warning"><b>5. 단가표 확인은 참고용</b><small>현재는 접근/미리보기만 제공</small></li>
-        <li data-state="warning"><b>6. 일일마감 시트에는 테스트 행만 추가</b><small>실제 발주서 분석 반영은 아직 미구현</small></li>
-      </ol>
+      <div class="connection-panel" id="connectionPanel" data-state="loading">
+        <div>
+          <small>Apps Script 연결 상태</small>
+          <strong id="connectionStatus">확인 중</strong>
+        </div>
+        <p id="connectionDescription">브랜아크 자동화 연결 상태를 확인하고 있습니다.</p>
+      </div>
+
+      <div class="health-grid">
+        <article class="health-card" id="healthDriveCard" data-state="waiting">
+          <small>Google Drive</small>
+          <strong id="healthDriveTitle">확인 대기</strong>
+          <p id="healthDriveDescription">발주서 저장 폴더 접근 상태를 확인합니다.</p>
+        </article>
+        <article class="health-card" id="healthDailySheetCard" data-state="waiting">
+          <small>일일마감 시트</small>
+          <strong id="healthDailySheetTitle">확인 대기</strong>
+          <p id="healthDailySheetDescription">반영 대상 시트와 헤더 구조를 확인합니다.</p>
+        </article>
+        <article class="health-card" id="healthPriceCard" data-state="waiting">
+          <small>공급단가표</small>
+          <strong id="healthPriceTitle">확인 대기</strong>
+          <p id="healthPriceDescription">단가표 접근 상태와 미리보기 가능 여부를 확인합니다.</p>
+        </article>
+      </div>
+
+      <div class="summary-grid compact-grid">
+        <div><small>health check 시각</small><strong id="healthCheckedAt">-</strong></div>
+        <div><small>페이지 업로드 허용</small><strong id="healthAllowPageUpload">-</strong></div>
+        <div><small>허용 Origin</small><strong id="healthAllowedOrigin">-</strong></div>
+        <div><small>인증 설정 여부</small><strong id="healthApiToken">-</strong></div>
+      </div>
     </section>
 
     <section class="card upload-card">
       <div class="section-title">
         <span>2</span>
         <div>
-          <h2>발주서 업로드 및 테스트 반영</h2>
-          <p>실제 직원이 검토하기 쉽게 입력값과 파일 조건을 먼저 확인한 뒤 업로드를 시작합니다.</p>
+          <h2>발주서 업로드</h2>
+          <p>지원 형식은 csv, xlsx, xls이며 8MB 이하 파일만 업로드할 수 있습니다.</p>
         </div>
       </div>
 
       <label class="upload-box" for="orderFile">
-        <input id="orderFile" type="file" accept=".xlsx,.xls,.csv" />
-        <span class="upload-icon">파일</span>
-        <strong id="fileName">발주서 파일을 선택하세요</strong>
-        <em>지원 형식은 xlsx, xls, csv이며 최대 8MB까지 업로드할 수 있습니다.</em>
+        <input id="orderFile" type="file" accept=".csv,.xlsx,.xls" />
+        <span class="upload-icon">UPLOAD</span>
+        <strong id="fileName">발주서 파일을 선택해 주세요</strong>
+        <em>업로드 후 파일 분석, 단가 검증, 일일마감 반영 미리보기, 최종 반영까지 순서대로 진행합니다.</em>
       </label>
 
-      <div class="form-grid">
-        <label class="form-field">
-          <small>주문일</small>
-          <input id="orderDate" type="date" />
-        </label>
-        <label class="form-field">
-          <small>상품명</small>
-          <input id="productName" type="text" placeholder="예: 김밥집 궁채 2kg" />
-        </label>
-        <label class="form-field">
-          <small>수량</small>
-          <input id="quantity" type="number" min="1" step="1" value="1" />
-        </label>
-        <label class="form-field">
-          <small>공급단가</small>
-          <input id="supplyPrice" type="number" min="0" step="1" value="0" />
-        </label>
+      <div class="form-grid single-row">
         <label class="inline-check full-width">
           <input id="allowDuplicateFile" type="checkbox" />
           <span>같은 파일명이 이미 있어도 업로드 허용</span>
@@ -127,53 +89,104 @@
       </div>
 
       <div class="rule-box">
-        <strong>업로드 전 확인</strong>
-        <p>중복 허용을 체크하지 않으면 같은 파일명은 Drive 저장 전에 차단됩니다.</p>
-        <p>화면의 상품명, 수량, 공급단가는 현재 테스트 행 작성용 입력값이며, 실제 발주서 내부 데이터를 읽어 계산하는 단계는 아직 아닙니다.</p>
+        <strong>처리 흐름</strong>
+        <p>발주서 파일 업로드 → 파일 저장 및 시트 탐색 → 상품별 집계 → 공급단가표 검증 → 일일마감 반영 예정 행 구성 → 검증 통과 시 일일마감 시트 반영</p>
+        <p>운송장이 있으면 운송장을 기준 수량으로 사용하고, 출고일지/출고일지(2)는 검증용 비교 데이터로만 사용합니다.</p>
       </div>
 
-      <button id="validateButton" class="primary-button" type="button">발주서 업로드 및 테스트 행 작성</button>
-      <p id="uploadMessage" class="helper-text">먼저 health check가 정상인지 확인한 뒤 업로드를 진행하세요.</p>
+      <ol class="status-list" id="statusList">
+        <li data-state="waiting"><b>파일 조건 확인</b><small>대기</small></li>
+        <li data-state="waiting"><b>Apps Script 요청 전송</b><small>대기</small></li>
+        <li data-state="waiting"><b>파일 분석 및 시트 탐색</b><small>대기</small></li>
+        <li data-state="waiting"><b>수량 비교 및 단가 검증</b><small>대기</small></li>
+        <li data-state="waiting"><b>일일마감 반영 예정 행 구성</b><small>대기</small></li>
+        <li data-state="waiting"><b>일일마감 시트 반영</b><small>대기</small></li>
+      </ol>
+
+      <button id="validateButton" class="primary-button" type="button">발주서 업로드 및 자동 분석 시작</button>
+      <p id="uploadMessage" class="helper-text">자동화 연결 상태가 정상일 때 업로드 버튼이 활성화됩니다.</p>
     </section>
 
     <section class="card">
       <div class="section-title">
         <span>3</span>
         <div>
-          <h2>실시간 처리 상태</h2>
-          <p>업로드 버튼을 누르면 파일 검증부터 Drive 저장, 테스트 행 추가까지 단계별 상태를 보여줍니다.</p>
+          <h2>분석 결과 요약</h2>
+          <p>업로드 파일 정보, 분석 대상 시트, 수량 비교 요약, 확인 필요 항목을 함께 보여줍니다.</p>
         </div>
       </div>
 
-      <ol class="status-list" id="statusList">
-        <li data-state="waiting"><b>파일 선택 및 형식 확인</b><small>대기</small></li>
-        <li data-state="waiting"><b>입력값 검증</b><small>대기</small></li>
-        <li data-state="waiting"><b>Apps Script 요청 전송</b><small>대기</small></li>
-        <li data-state="waiting"><b>중복 파일명 확인</b><small>대기</small></li>
-        <li data-state="waiting"><b>Google Drive 저장</b><small>대기</small></li>
-        <li data-state="waiting"><b>일일마감 테스트 행 추가</b><small>대기</small></li>
-      </ol>
+      <div class="summary-grid" id="fileInfoGrid">
+        <div><small>파일명</small><strong id="summaryFileName">-</strong></div>
+        <div><small>처리 모드</small><strong id="summaryMode">-</strong></div>
+        <div><small>분석 시트</small><strong id="summarySourceSheets">-</strong></div>
+        <div><small>원본 행 수</small><strong id="summarySourceRows">-</strong></div>
+      </div>
+
+      <div class="comparison-box" id="comparisonBox" data-state="idle">
+        <div class="comparison-header">
+          <strong id="comparisonTitle">수량 비교 대기</strong>
+          <span id="comparisonStatusBadge" class="status-badge">대기</span>
+        </div>
+        <p id="comparisonDescription">발주서 분석 후 운송장과 출고일지 수량 비교 결과를 표시합니다.</p>
+        <div class="comparison-grid">
+          <div><small>기준 시트</small><strong id="comparisonPrimary">-</strong></div>
+          <div><small>검증 시트</small><strong id="comparisonValidation">-</strong></div>
+          <div><small>기준 수량 합계</small><strong id="comparisonPrimaryTotal">-</strong></div>
+          <div><small>검증 수량 합계</small><strong id="comparisonValidationTotal">-</strong></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>주문일</th>
+              <th>원본 상품명</th>
+              <th>정규화 상품명</th>
+              <th>규격</th>
+              <th>수량</th>
+              <th>원본 시트</th>
+            </tr>
+          </thead>
+          <tbody id="aggregateTableBody">
+            <tr><td colspan="6">아직 분석 결과가 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="issuesPanel" class="issue-panel">
+        <p class="issue-empty">아직 오류나 확인 필요 항목이 없습니다.</p>
+      </div>
     </section>
 
-    <section class="card result-card">
+    <section class="card table-card">
       <div class="section-title">
         <span>4</span>
         <div>
-          <h2>처리 결과</h2>
-          <p>정상 업로드 시 Drive 파일 생성 결과와 테스트 행 반영 결과를 그대로 보여줍니다.</p>
+          <h2>단가표 검증</h2>
+          <p id="priceVerificationMessage">공급단가표를 기준으로 금액을 확인한 뒤 결과를 보여줍니다.</p>
         </div>
       </div>
 
-      <div class="summary-grid">
-        <div><small>파일명</small><strong id="resultFileName">-</strong></div>
-        <div><small>Drive 파일 ID</small><strong id="resultFileId">-</strong></div>
-        <div><small>일일마감 시트</small><strong id="resultSheetName">-</strong></div>
-        <div><small>추가된 행 번호</small><strong id="resultRow">-</strong></div>
-      </div>
-
-      <div class="rule-box result-output-box">
-        <strong>응답 상세</strong>
-        <pre id="resultOutput">아직 실행 전입니다.</pre>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>발주서 상품명</th>
+              <th>단가표 상품명</th>
+              <th>규격</th>
+              <th>공급단가</th>
+              <th>부가세</th>
+              <th>발주 수량</th>
+              <th>공급가 합계</th>
+              <th>매칭 상태</th>
+            </tr>
+          </thead>
+          <tbody id="priceMatchTableBody">
+            <tr><td colspan="8">아직 단가 검증 결과가 없습니다.</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -181,50 +194,79 @@
       <div class="section-title">
         <span>5</span>
         <div>
-          <h2>단가표 검토 UI</h2>
-          <p>health check에서 단가표가 Google Sheet로 열리면 상위 일부 행을 불러와 검토용으로 보여줍니다.</p>
+          <h2>일일마감 반영 미리보기</h2>
+          <p>아래 내용으로 일일마감 양식 첫 번째 시트에 반영됩니다.</p>
         </div>
       </div>
 
-      <div class="table-wrap compact">
+      <div class="table-wrap">
         <table>
           <thead>
             <tr>
+              <th>주문일</th>
               <th>상품명</th>
+              <th>정규화 상품명</th>
+              <th>수량</th>
               <th>공급단가</th>
+              <th>공급가 합계</th>
+              <th>비고</th>
             </tr>
           </thead>
-          <tbody id="pricePreviewBody">
-            <tr>
-              <td colspan="2">단가표를 아직 불러오지 않았습니다.</td>
-            </tr>
+          <tbody id="previewTableBody">
+            <tr><td colspan="7">아직 반영 예정 행이 없습니다.</td></tr>
           </tbody>
         </table>
       </div>
-
-      <div class="rule-box">
-        <strong>검토 안내</strong>
-        <p id="pricePreviewDescription">단가표 접근 상태를 확인하면 이 영역에 검토용 정보가 표시됩니다.</p>
-      </div>
     </section>
 
-    <section class="card error-card">
+    <section class="card result-card">
       <div class="section-title">
-        <span>!</span>
+        <span>6</span>
         <div>
-          <h2>운영 체크 포인트</h2>
-          <p>문제가 생기면 아래 항목을 순서대로 확인해 주세요.</p>
+          <h2>반영 완료 결과</h2>
+          <p>Drive 저장 결과와 일일마감 반영 결과를 요약합니다.</p>
         </div>
       </div>
-      <div class="error-grid">
-        <span>Apps Script가 최신 버전으로 재배포되었는지</span>
-        <span>ALLOW_PAGE_UPLOAD와 ALLOWED_PAGE_ORIGIN이 맞는지</span>
-        <span>DRIVE_FOLDER_ID가 실제 발주서 폴더인지</span>
-        <span>DAILY_SHEET_ID 첫 번째 시트에 테스트 행이 추가되는지</span>
-        <span>PRICE_SHEET_ID 접근이 가능한지</span>
-        <span>중복 파일명 허용 체크 여부가 의도와 맞는지</span>
+
+      <div class="summary-grid">
+        <div><small>Drive 파일 ID</small><strong id="resultFileId">-</strong></div>
+        <div><small>일일마감 시트</small><strong id="resultSheetName">-</strong></div>
+        <div><small>반영 행 수</small><strong id="resultRowCount">-</strong></div>
+        <div><small>경고 건수</small><strong id="resultWarningCount">-</strong></div>
+      </div>
+
+      <div class="rule-box result-output-box">
+        <strong>운영 확인</strong>
+        <p>처리 결과는 위 요약과 미리보기 표에서 확인하세요. 상세 응답은 아래 개발자용 상세 로그에만 표시됩니다.</p>
       </div>
     </section>
+
+    <details class="developer-log">
+      <summary>개발자용 상세 로그 보기</summary>
+      <p class="developer-copy">이 영역은 오류 확인용입니다. 일반 작업자는 확인하지 않아도 됩니다.</p>
+      <div class="developer-grid">
+        <div class="rule-box">
+          <strong>Apps Script health check 응답</strong>
+          <pre id="developerHealthOutput">-</pre>
+        </div>
+        <div class="rule-box">
+          <strong>업로드 요청 payload 요약</strong>
+          <pre id="developerPayloadOutput">-</pre>
+        </div>
+        <div class="rule-box">
+          <strong>처리 상세 로그</strong>
+          <pre id="developerProcessOutput">-</pre>
+        </div>
+        <div class="rule-box">
+          <strong>처리 결과 상세 JSON</strong>
+          <pre id="resultOutput">아직 실행 전입니다.</pre>
+        </div>
+        <div class="rule-box">
+          <strong>원본 응답 JSON</strong>
+          <pre id="developerRawOutput">-</pre>
+        </div>
+      </div>
+    </details>
   </main>
 
   <script src="./config.js"></script>

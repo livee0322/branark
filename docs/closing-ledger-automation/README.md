@@ -1,32 +1,35 @@
-# 마감원장 자동화 프로세스 초안
+# 브랜아크 일일마감 자동화
 
-브랜아크 발주서와 발주단가표를 비교하여 마감원장 초안을 생성하고, 사람이 PR에서 검증한 뒤 merge 시 Google Spreadsheet 마감원장을 생성하는 구조입니다.
+브랜아크 발주서 파일을 업로드하면 Google Apps Script가 파일을 Drive에 저장하고, 시트를 읽고, 공급단가표를 검증한 뒤 일일마감 양식 첫 번째 시트에 반영하는 자동화입니다.
 
-## 목표
+## 현재 처리 흐름
 
-- 발주서 수량 집계 오류 최소화
-- 발주단가 누락 자동 감지
-- PR 기반 사람 검수 단계 확보
-- merge 이후에만 최종 Google Spreadsheet 생성
-- 텔레그램으로 처리 결과 공유
+1. `index.html` 또는 `web/closing-ledger/index.html`에서 발주서 파일을 업로드합니다.
+2. 프론트가 Apps Script `action=health`를 먼저 호출해 업로드 가능 상태를 확인합니다.
+3. Apps Script가 업로드 파일을 Drive 폴더에 저장합니다.
+4. `csv`, `xlsx`, `xls` 파일을 읽어 운송장 / 출고일지 후보 시트를 탐색합니다.
+5. 운송장이 있으면 운송장을 기준 수량으로 사용하고, 출고일지 / 출고일지(2)는 검증용 비교 시트로 사용합니다.
+6. 상품별 집계 후 공급단가표 Google Sheet를 읽어 상품명 + 규격 기준으로 공급단가를 매칭합니다.
+7. 검증이 모두 통과하면 일일마감 양식 첫 번째 시트에 결과 행을 추가합니다.
 
-## 기본 흐름
+## Script Properties
 
-```text
-1. 발주서 파일 업로드
-2. GitHub Action 실행
-3. 발주서 / 발주단가표 비교
-4. 마감원장 초안 CSV 및 검증 리포트 생성
-5. 자동 PR 생성
-6. 담당자가 PR에서 수량·단가·누락 상품 검증
-7. 승인 후 merge
-8. merge 이벤트로 Google Spreadsheet 생성
-9. 텔레그램 완료 알림
-```
+- `API_TOKEN`
+- `DRIVE_FOLDER_ID=1BKiey_Z7U8IF4M6tYGsLczeGXO6QyBDj`
+- `DAILY_SHEET_ID=18YVXMvVAPBhSvuKQ9emEYQGy3wI0iHTS3B0lJvANAZA`
+- `PRICE_SHEET_ID=1acSTjRKQSRFA4rS-OkpV042XmORCA9-8Hke0QYJd5K4`
+- `ALLOW_PAGE_UPLOAD=true`
+- `ALLOWED_PAGE_ORIGIN=https://livee0322.github.io`
 
-## 현재 문서
+## GitHub Repository Variables
 
-- `process.md` : 전체 업무 흐름
-- `folder-structure.md` : 폴더 구조
-- `validation-rules.md` : 검증 규칙
-- `spreadsheet-spec.md` : 생성될 마감원장 시트 규격
+- `EXPECTED_PRICE_SHEET_ID=1acSTjRKQSRFA4rS-OkpV042XmORCA9-8Hke0QYJd5K4`
+
+## 검증 포인트
+
+- `sample_csv` 모드에서도 `temporaryFileIds` 누락 없이 처리되어야 합니다.
+- 운송장과 출고일지가 함께 있으면 운송장 기준 수량만 반영하고, 출고일지는 비교에만 사용해야 합니다.
+- 운송장 수량과 출고일지 합계가 다르면 반영이 차단되어야 합니다.
+- 공급단가표는 상품명 + 규격 기준으로 우선 매칭해야 합니다.
+- 단가표에서 찾지 못한 상품이 있으면 일일마감 반영이 차단되어야 합니다.
+- Health check에서 `ALLOW_PAGE_UPLOAD`, `ALLOWED_PAGE_ORIGIN`, Drive, 일일마감 시트, 공급단가표 접근 결과가 모두 실제 응답으로 보이도록 유지해야 합니다.

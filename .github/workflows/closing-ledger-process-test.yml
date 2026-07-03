@@ -3,30 +3,45 @@ name: Branark Closing Ledger Process Test
 on:
   workflow_dispatch:
     inputs:
+      test_mode:
+        description: "실행 모드"
+        required: true
+        default: "sample_csv"
+        type: choice
+        options:
+          - sample_csv
+          - manual_payload
       test_file_name:
-        description: "Drive에 생성할 테스트 파일명"
+        description: "Drive에 저장할 테스트 파일명"
         required: true
-        default: "branark-closing-ledger-test.txt"
+        default: "branark-closing-ledger-sample.csv"
+      sample_csv_content:
+        description: "sample_csv 모드에서 사용할 CSV 문자열"
+        required: false
+        default: |
+          주문일,판매처,주문번호,상품명,수량
+          2026-07-03,브랜아크몰,ORDER-1001,김밥집 궁채 2kg_2,1
+          2026-07-03,브랜아크몰,ORDER-1002,아삭아삭 궁채장아찌 10KG,3
       order_date:
-        description: "일일 마감 양식 주문일"
-        required: true
+        description: "manual_payload 모드 주문일"
+        required: false
         default: "2026-07-03"
       product_name:
-        description: "테스트 상품명"
-        required: true
+        description: "manual_payload 모드 상품명"
+        required: false
         default: "[TEST] 김밥집 궁채 2kg"
       quantity:
-        description: "테스트 수량"
-        required: true
+        description: "manual_payload 모드 수량"
+        required: false
         default: "1"
       supply_price:
-        description: "테스트 공급단가"
-        required: true
+        description: "manual_payload 모드 공급단가"
+        required: false
         default: "7425"
       allow_duplicate_file:
-        description: "같은 파일명이 있어도 생성 허용"
+        description: "같은 파일명이 이미 있어도 생성 허용"
         required: true
-        default: "false"
+        default: "true"
         type: choice
         options:
           - "false"
@@ -42,25 +57,28 @@ jobs:
     env:
       APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL || vars.APPS_SCRIPT_WEB_APP_URL }}
       APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN || vars.APPS_SCRIPT_API_TOKEN }}
+      EXPECTED_PRICE_SHEET_ID: ${{ vars.EXPECTED_PRICE_SHEET_ID }}
+      TEST_MODE: ${{ inputs.test_mode }}
       TEST_FILE_NAME: ${{ inputs.test_file_name }}
+      SAMPLE_CSV_CONTENT: ${{ inputs.sample_csv_content }}
       ORDER_DATE: ${{ inputs.order_date }}
       PRODUCT_NAME: ${{ inputs.product_name }}
       QUANTITY: ${{ inputs.quantity }}
       SUPPLY_PRICE: ${{ inputs.supply_price }}
       ALLOW_DUPLICATE_FILE: ${{ inputs.allow_duplicate_file }}
     steps:
-      - name: Call Google Apps Script Web App
+      - name: Health check and process test
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           import json
           import os
-          import sys
           import urllib.error
+          import urllib.parse
           import urllib.request
 
-          required = ["APPS_SCRIPT_WEB_APP_URL", "APPS_SCRIPT_API_TOKEN"]
+          required = ["APPS_SCRIPT_WEB_APP_URL", "APPS_SCRIPT_API_TOKEN", "EXPECTED_PRICE_SHEET_ID"]
           missing = [name for name in required if not os.environ.get(name)]
           if missing:
               raise SystemExit("필수 설정값 누락: " + ", ".join(missing))
@@ -69,15 +87,62 @@ jobs:
           if not url.startswith("https://script.google.com/"):
               raise SystemExit("APPS_SCRIPT_WEB_APP_URL은 Google Apps Script Web App 배포 URL이어야 합니다.")
 
+          health_query = urllib.parse.urlencode({"action": "health"})
+          health_url = f"{url}?{health_query}"
+
+          try:
+              with urllib.request.urlopen(health_url, timeout=60) as response:
+                  health_body = response.read().decode("utf-8")
+          except urllib.error.HTTPError as error:
+              error_body = error.read().decode("utf-8", errors="replace")
+              print(error_body)
+              raise SystemExit(f"Health check 실패: HTTP {error.code}")
+          except urllib.error.URLError as error:
+              raise SystemExit(f"Health check 연결 실패: {error}")
+
+          print(health_body)
+
+          try:
+              health = json.loads(health_body)
+          except json.JSONDecodeError as error:
+              raise SystemExit(f"Health check 응답이 JSON이 아닙니다: {error}")
+
+          if not health.get("ok"):
+              raise SystemExit("Health check 실패: " + str(health.get("userMessage") or health.get("error")))
+
+          actual_price_sheet_id = (
+              ((health.get("price") or {}).get("id"))
+              or health.get("priceFileId")
+              or ""
+          )
+          expected_price_sheet_id = os.environ["EXPECTED_PRICE_SHEET_ID"].strip()
+          if actual_price_sheet_id != expected_price_sheet_id:
+              raise SystemExit(
+                  "PRICE_SHEET_ID 불일치\n"
+                  f"Apps Script 현재 값 = {actual_price_sheet_id}\n"
+                  f"GitHub 기대 값 = {expected_price_sheet_id}\n"
+                  "Apps Script Script Properties의 PRICE_SHEET_ID를 새 공급단가표 Google Sheet ID로 설정해 주세요."
+              )
+
+          mode = os.environ["TEST_MODE"].strip()
           payload = {
               "apiToken": os.environ["APPS_SCRIPT_API_TOKEN"],
               "testFileName": os.environ["TEST_FILE_NAME"].strip(),
-              "orderDate": os.environ["ORDER_DATE"].strip(),
-              "productName": os.environ["PRODUCT_NAME"].strip(),
-              "quantity": int(os.environ["QUANTITY"]),
-              "supplyPrice": int(os.environ["SUPPLY_PRICE"]),
               "allowDuplicateFile": os.environ["ALLOW_DUPLICATE_FILE"].lower() == "true",
           }
+
+          if mode == "sample_csv":
+              payload["mode"] = "sample-csv-test"
+              payload["sampleCsvContent"] = os.environ["SAMPLE_CSV_CONTENT"]
+              payload["fileMimeType"] = "text/csv"
+          elif mode == "manual_payload":
+              payload["mode"] = "manual-test"
+              payload["orderDate"] = os.environ["ORDER_DATE"].strip()
+              payload["productName"] = os.environ["PRODUCT_NAME"].strip()
+              payload["quantity"] = int(os.environ["QUANTITY"])
+              payload["supplyPrice"] = int(os.environ["SUPPLY_PRICE"])
+          else:
+              raise SystemExit(f"지원하지 않는 TEST_MODE: {mode}")
 
           body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
           request = urllib.request.Request(
@@ -88,7 +153,7 @@ jobs:
           )
 
           try:
-              with urllib.request.urlopen(request, timeout=90) as response:
+              with urllib.request.urlopen(request, timeout=120) as response:
                   response_body = response.read().decode("utf-8")
           except urllib.error.HTTPError as error:
               error_body = error.read().decode("utf-8", errors="replace")
@@ -105,11 +170,20 @@ jobs:
               raise SystemExit(f"Apps Script 응답이 JSON이 아닙니다: {error}")
 
           if not result.get("ok"):
-              raise SystemExit("Apps Script 처리 실패: " + str(result.get("error")))
+              raise SystemExit("Apps Script 처리 실패: " + str(result.get("userMessage") or result.get("error")))
 
           print("브랜아크 일일마감 Apps Script 처리 완료")
-          print("- Drive file:", result.get("fileName"), result.get("fileId"))
-          print("- Drive URL:", result.get("fileUrl"))
-          print("- Daily sheet:", result.get("spreadsheetTitle"), "/", result.get("sheetName"))
-          print("- Appended row:", result.get("appendedRow"))
+          print("- mode:", result.get("mode"))
+          uploaded = result.get("uploadedFile") or {}
+          appended = result.get("appended") or {}
+          parsed = result.get("parsed") or {}
+          matched = result.get("matched") or {}
+          comparison = result.get("comparison") or {}
+          print("- Drive file:", uploaded.get("fileName"), uploaded.get("fileId"))
+          print("- Source sheets:", parsed.get("sourceSheetNames"))
+          print("- Source rows:", parsed.get("sourceRowCount"))
+          print("- Quantity comparison:", comparison.get("primaryQuantityTotal"), "/", comparison.get("validationQuantityTotal"), comparison.get("quantityMatched"))
+          print("- Matched / unmatched:", matched.get("matchedCount"), "/", matched.get("unmatchedCount"))
+          print("- Daily sheet:", appended.get("spreadsheetTitle"), "/", appended.get("sheetName"))
+          print("- Appended rows:", appended.get("rowCount"), appended.get("startRow"), appended.get("endRow"))
           PY

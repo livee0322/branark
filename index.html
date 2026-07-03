@@ -9,57 +9,99 @@
 <body>
   <main class="page-shell">
     <section class="hero-card">
-      <p class="eyebrow">BRANARK CLOSING LEDGER</p>
-      <h1>브랜아크 일일마감 자동화</h1>
-      <p class="hero-copy">발주서 파일을 업로드하면 Google Drive에 저장하고, 단가표와 발주서를 검증한 뒤 일일 마감 양식에 추가하는 운영 기준 화면입니다.</p>
+      <p class="eyebrow">BRANARK CLOSING LEDGER · TEST MODE</p>
+      <h1>브랜아크 일일마감 자동화 테스트</h1>
+      <p class="hero-copy">발주서 파일을 업로드하면 Google Drive에 저장하고, 발주서와 단가표를 검증한 뒤 일일 마감 양식에 맞춰 작성하는 자동화 흐름을 테스트합니다.</p>
     </section>
 
     <section class="notice-card">
-      <strong>필수 운영 규칙</strong>
-      <p>일일 마감 양식을 마음대로 변경하지 마세요. 컬럼이 변경되면 자동화가 중단됩니다.</p>
+      <strong>테스트 안내</strong>
+      <p>현재 화면은 외부 피드백용 테스트 UI입니다. 파일 첨부 UI와 워크플로우 흐름, 연결된 Google Drive / Sheet 기준을 먼저 확인합니다.</p>
     </section>
 
     <section class="card result-card">
       <div class="section-title">
         <span>0</span>
         <div>
-          <h2>연동 기준 정보</h2>
-          <p>실제 자동화에서 사용할 Google Drive 저장 위치, 작업 시트, API env 기준입니다.</p>
+          <h2>현재 연결된 Google 리소스</h2>
+          <p>이번 테스트에서 사용할 Drive 폴더, 일일 마감 양식, 단가표 연결 기준입니다.</p>
         </div>
       </div>
 
       <div class="summary-grid">
-        <div><small>발주서 저장 폴더</small><strong>Google Drive / 7월 / 발주서</strong></div>
-        <div><small>일일 마감 작업 시트</small><strong>일일 마감 양식</strong></div>
-        <div><small>단가표 파일</small><strong>공급단가.XLS</strong></div>
-        <div><small>처리 방식</small><strong>API 저장 후 시트 반영</strong></div>
+        <div><small>발주서 저장 위치</small><strong>Google Drive / 7월 / 발주서</strong></div>
+        <div><small>일일 마감 양식</small><strong>일일 마감 양식 Google Sheet</strong></div>
+        <div><small>단가표</small><strong>공급단가.XLS</strong></div>
+        <div><small>현재 단계</small><strong>테스트 UI / API 연결 점검</strong></div>
+      </div>
+
+      <div class="table-wrap compact" style="margin-top: 18px;">
+        <table>
+          <thead>
+            <tr>
+              <th>구분</th>
+              <th>환경값 이름</th>
+              <th>연결 ID</th>
+              <th>역할</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Google Drive</td>
+              <td>DRIVE_FOLDER_ID</td>
+              <td>1R2QI-0-yqhSeIgOeqzsLFhzFpLXhs5mp</td>
+              <td>업로드한 발주서 파일 저장 폴더</td>
+            </tr>
+            <tr>
+              <td>Google Sheet</td>
+              <td>DAILY_SHEET_ID</td>
+              <td>18YVXMvVAPBhSvuKQ9emEYQGy3wI0iHTS3B0lJvANAZA</td>
+              <td>검증 완료 데이터를 추가할 일일 마감 양식</td>
+            </tr>
+            <tr>
+              <td>단가표</td>
+              <td>PRICE_SHEET_ID</td>
+              <td>1mP5w2vpYLZamGuWnG800UKIO37lBKC1Q</td>
+              <td>상품명과 공급단가를 매칭할 기준 파일</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="rule-box">
-        <strong>저장 및 반영 기준</strong>
-        <p>발주서 업로드 파일은 Google Drive의 <b>7월 / 발주서</b> 폴더에 저장합니다.</p>
-        <p>업로드 전 같은 폴더에 동일 파일명이 있는지 확인하고, 중복이면 저장과 일일 마감 반영을 중단합니다.</p>
-        <p>검증 완료 데이터는 <b>일일 마감 양식</b> 시트에 주문일, 상품명, 수량, 공급단가, 공급가 합계, 비고 컬럼 기준으로 추가합니다.</p>
-        <p>공급단가는 <b>공급단가.XLS</b> 파일을 기준으로 매칭하며, 단가가 없는 상품은 자동 반영하지 않습니다.</p>
-        <p>발주서 분석 기준 시트는 <b>운송장</b>, <b>출고일지</b>, <b>출고일지(2)</b>입니다.</p>
+        <strong>연결 상태 확인 방법</strong>
+        <p>GitHub Actions의 <b>Branark Closing Ledger API Env Check</b> workflow를 수동 실행해 Drive 폴더, 일일 마감 양식, 단가표 접근 가능 여부를 확인합니다.</p>
+        <p>테스트 성공 기준은 각 ID에 접근 가능하고, 일일 마감 양식의 시트 탭 목록이 정상 출력되는 것입니다.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">
+        <span>1</span>
+        <div>
+          <h2>테스트 워크플로우</h2>
+          <p>파일 업로드 후 자동화가 처리해야 하는 순서입니다. 피드백 시 이 흐름이 실무와 맞는지 확인하면 됩니다.</p>
+        </div>
       </div>
 
-      <div class="rule-box">
-        <strong>API env 연결 상태 기준</strong>
-        <p><b>GOOGLE_SERVICE_ACCOUNT_JSON</b> : Google Drive / Sheet API 인증 정보</p>
-        <p><b>DRIVE_FOLDER_ID</b> : 발주서 저장 Google Drive 폴더</p>
-        <p><b>DAILY_SHEET_ID</b> : 일일 마감 양식 Google Sheet</p>
-        <p><b>PRICE_SHEET_ID</b> : 단가표 파일 또는 단가표 Sheet</p>
-        <p>연결 상태는 GitHub Actions의 <b>Branark Closing Ledger API Env Check</b> workflow에서 수동 점검합니다.</p>
-      </div>
+      <ol class="status-list">
+        <li data-state="success"><b>1. 발주서 파일 첨부</b><small>xlsx / xls / csv</small></li>
+        <li data-state="success"><b>2. 파일 형식 검사</b><small>확장자 확인</small></li>
+        <li data-state="success"><b>3. 중복 파일명 확인</b><small>Drive 폴더 기준</small></li>
+        <li data-state="success"><b>4. Google Drive 저장</b><small>DRIVE_FOLDER_ID</small></li>
+        <li data-state="waiting"><b>5. 발주서 내용 확인</b><small>운송장 / 출고일지</small></li>
+        <li data-state="waiting"><b>6. 단가표 매칭</b><small>PRICE_SHEET_ID</small></li>
+        <li data-state="waiting"><b>7. 일일 마감 양식 작성</b><small>DAILY_SHEET_ID</small></li>
+        <li data-state="waiting"><b>8. 작업 결과 화면 표시</b><small>성공 / 오류 / 단가표</small></li>
+      </ol>
     </section>
 
     <section class="card upload-card">
       <div class="section-title">
-        <span>1</span>
+        <span>2</span>
         <div>
-          <h2>발주서 업로드</h2>
-          <p>xlsx, xls, csv 파일만 지원합니다.</p>
+          <h2>발주서 업로드 테스트</h2>
+          <p>파일을 선택하면 화면에서 파일명을 확인하고, 업로드 및 검증 시작 버튼으로 테스트 흐름을 확인합니다.</p>
         </div>
       </div>
 
@@ -76,15 +118,15 @@
       </div>
 
       <button id="validateButton" class="primary-button" type="button">업로드 및 검증 시작</button>
-      <p id="uploadMessage" class="helper-text">현재 화면은 업로드 API 연결을 전제로 한 HTML입니다. 실제 Drive 저장은 API 구현 후 동작합니다.</p>
+      <p id="uploadMessage" class="helper-text">현재는 테스트 UI 단계입니다. 실제 Drive 저장과 Sheet 작성은 API 구현 및 workflow 연결 후 동작합니다.</p>
     </section>
 
     <section class="card">
       <div class="section-title">
-        <span>2</span>
+        <span>3</span>
         <div>
-          <h2>처리 상태</h2>
-          <p>파일 업로드 후 단계별 상태를 표시합니다.</p>
+          <h2>실시간 처리 상태</h2>
+          <p>업로드 버튼 클릭 후 단계별 상태를 표시합니다.</p>
         </div>
       </div>
 
@@ -100,10 +142,10 @@
 
     <section class="card result-card">
       <div class="section-title">
-        <span>3</span>
+        <span>4</span>
         <div>
-          <h2>검증 결과</h2>
-          <p>업로드 파일 기준으로 반영 전 확인해야 할 내용입니다.</p>
+          <h2>검증 결과 예시</h2>
+          <p>실제 API 연결 후 업로드 파일 기준으로 표시될 결과 영역입니다.</p>
         </div>
       </div>
 
@@ -124,7 +166,7 @@
 
     <section class="card table-card">
       <div class="section-title">
-        <span>4</span>
+        <span>5</span>
         <div>
           <h2>일일 마감 추가 예정 내용</h2>
           <p>일일 마감 양식에 추가될 데이터 미리보기입니다.</p>
@@ -155,31 +197,25 @@
 
     <section class="card table-card">
       <div class="section-title">
-        <span>5</span>
+        <span>6</span>
         <div>
-          <h2>단가표 검증</h2>
-          <p>단가표는 전체 표기하고, 아래에 검증 문구를 함께 표시합니다.</p>
+          <h2>단가표 검증 예시</h2>
+          <p>단가표는 전체 표기하고, 상품별 매칭 결과를 함께 표시합니다.</p>
         </div>
       </div>
 
       <div class="table-wrap compact">
         <table>
           <thead>
-            <tr><th>상품명</th><th>공급단가</th></tr>
+            <tr><th>상품명</th><th>공급단가</th><th>상태</th></tr>
           </thead>
           <tbody>
-            <tr><td>아삭아삭 궁채장아찌 4kg</td><td>8,800원</td></tr>
-            <tr><td>아삭아삭 궁채장아찌 1kg</td><td>2,200원</td></tr>
-            <tr><td>아삭아삭 궁채장아찌 10kg</td><td>21,500원</td></tr>
-            <tr><td>김밥집 궁채 2kg</td><td>7,425원</td></tr>
+            <tr><td>아삭아삭 궁채장아찌 4kg</td><td>8,800원</td><td>매칭 완료</td></tr>
+            <tr><td>아삭아삭 궁채장아찌 1kg</td><td>2,200원</td><td>매칭 완료</td></tr>
+            <tr><td>아삭아삭 궁채장아찌 10kg</td><td>21,500원</td><td>매칭 완료</td></tr>
+            <tr><td>김밥집 궁채 2kg</td><td>7,425원</td><td>매칭 완료</td></tr>
           </tbody>
         </table>
-      </div>
-
-      <div class="rule-box">
-        <strong>검증 내용</strong>
-        <p>“아삭아삭 궁채장아찌 4kg” = 8,800원</p>
-        <p>“김밥집 궁채 2kg” = 7,425원</p>
       </div>
     </section>
 
@@ -187,17 +223,17 @@
       <div class="section-title">
         <span>!</span>
         <div>
-          <h2>오류 메시지 규칙</h2>
-          <p>자동화 차단 시 사용자에게 바로 보여줄 문구입니다.</p>
+          <h2>피드백 체크 포인트</h2>
+          <p>테스트 화면을 본 사람이 확인하면 좋은 항목입니다.</p>
         </div>
       </div>
       <div class="error-grid">
-        <span>중복된 파일명입니다.</span>
-        <span>지원하지 않는 파일 형식입니다.</span>
-        <span>운송장 시트를 찾을 수 없습니다.</span>
-        <span>출고일지 시트를 찾을 수 없습니다.</span>
-        <span>상품명1 컬럼을 찾을 수 없습니다.</span>
-        <span>일일 마감 양식이 변경되었습니다.</span>
+        <span>업로드 흐름이 이해되는지</span>
+        <span>연결된 Drive / Sheet 정보가 충분한지</span>
+        <span>중복 파일 차단 기준이 명확한지</span>
+        <span>단가표 검증 결과가 보기 쉬운지</span>
+        <span>일일 마감 양식 컬럼이 맞는지</span>
+        <span>오류 메시지가 실무에 맞는지</span>
       </div>
     </section>
   </main>

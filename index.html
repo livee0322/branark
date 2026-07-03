@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>브랜아크 일일마감 자동화</title>
+  <link rel="stylesheet" href="./web/closing-ledger/styles.css" />
+</head>
+<body>
+  <main class="page-shell">
+    <section class="hero-card">
+      <p class="eyebrow">BRANARK CLOSING LEDGER</p>
+      <h1>브랜아크 일일마감 자동화</h1>
+      <p class="hero-copy">발주서 파일을 업로드하면 Google Drive에 저장하고, 단가표와 발주서를 검증한 뒤 일일 마감 양식에 추가하는 운영 기준 화면입니다.</p>
+    </section>
+
+    <section class="notice-card">
+      <strong>필수 운영 규칙</strong>
+      <p>일일 마감 양식을 마음대로 변경하지 마세요. 컬럼이 변경되면 자동화가 중단됩니다.</p>
+    </section>
+
+    <section class="card result-card">
+      <div class="section-title">
+        <span>0</span>
+        <div>
+          <h2>연동 기준 정보</h2>
+          <p>실제 자동화에서 사용할 Google Drive 저장 위치, 작업 시트, API env 기준입니다.</p>
+        </div>
+      </div>
+
+      <div class="summary-grid">
+        <div><small>발주서 저장 폴더</small><strong>Google Drive / 7월 / 발주서</strong></div>
+        <div><small>일일 마감 작업 시트</small><strong>일일 마감 양식</strong></div>
+        <div><small>단가표 파일</small><strong>공급단가.XLS</strong></div>
+        <div><small>처리 방식</small><strong>API 저장 후 시트 반영</strong></div>
+      </div>
+
+      <div class="rule-box">
+        <strong>저장 및 반영 기준</strong>
+        <p>발주서 업로드 파일은 Google Drive의 <b>7월 / 발주서</b> 폴더에 저장합니다.</p>
+        <p>업로드 전 같은 폴더에 동일 파일명이 있는지 확인하고, 중복이면 저장과 일일 마감 반영을 중단합니다.</p>
+        <p>검증 완료 데이터는 <b>일일 마감 양식</b> 시트에 주문일, 상품명, 수량, 공급단가, 공급가 합계, 비고 컬럼 기준으로 추가합니다.</p>
+        <p>공급단가는 <b>공급단가.XLS</b> 파일을 기준으로 매칭하며, 단가가 없는 상품은 자동 반영하지 않습니다.</p>
+        <p>발주서 분석 기준 시트는 <b>운송장</b>, <b>출고일지</b>, <b>출고일지(2)</b>입니다.</p>
+      </div>
+
+      <div class="rule-box">
+        <strong>API env 연결 상태 기준</strong>
+        <p><b>GOOGLE_SERVICE_ACCOUNT_JSON</b> : Google Drive / Sheet API 인증 정보</p>
+        <p><b>DRIVE_FOLDER_ID</b> : 발주서 저장 Google Drive 폴더</p>
+        <p><b>DAILY_SHEET_ID</b> : 일일 마감 양식 Google Sheet</p>
+        <p><b>PRICE_SHEET_ID</b> : 단가표 파일 또는 단가표 Sheet</p>
+        <p>연결 상태는 GitHub Actions의 <b>Branark Closing Ledger API Env Check</b> workflow에서 수동 점검합니다.</p>
+      </div>
+    </section>
+
+    <section class="card upload-card">
+      <div class="section-title">
+        <span>1</span>
+        <div>
+          <h2>발주서 업로드</h2>
+          <p>xlsx, xls, csv 파일만 지원합니다.</p>
+        </div>
+      </div>
+
+      <label class="upload-box" for="orderFile">
+        <input id="orderFile" type="file" accept=".xlsx,.xls,.csv" />
+        <span class="upload-icon">📎</span>
+        <strong id="fileName">파일을 선택하세요</strong>
+        <em>파일 선택 후 업로드하면 Drive 저장, 중복 검사, 단가표 검증, 일일 마감 양식 반영 순서로 처리합니다.</em>
+      </label>
+
+      <div class="mode-box">
+        <label><input type="radio" name="mode" checked /> Google Drive에 저장 후 시트 연동</label>
+        <label class="disabled"><input type="radio" name="mode" disabled /> 파일만 즉시 검토</label>
+      </div>
+
+      <button id="validateButton" class="primary-button" type="button">업로드 및 검증 시작</button>
+      <p id="uploadMessage" class="helper-text">현재 화면은 업로드 API 연결을 전제로 한 HTML입니다. 실제 Drive 저장은 API 구현 후 동작합니다.</p>
+    </section>
+
+    <section class="card">
+      <div class="section-title">
+        <span>2</span>
+        <div>
+          <h2>처리 상태</h2>
+          <p>파일 업로드 후 단계별 상태를 표시합니다.</p>
+        </div>
+      </div>
+
+      <ol class="status-list" id="statusList">
+        <li data-state="waiting"><b>파일 형식 확인</b><small>대기</small></li>
+        <li data-state="waiting"><b>중복 파일명 확인</b><small>대기</small></li>
+        <li data-state="waiting"><b>Google Drive 저장</b><small>대기</small></li>
+        <li data-state="waiting"><b>발주서 내용 확인</b><small>대기</small></li>
+        <li data-state="waiting"><b>단가표 매칭</b><small>대기</small></li>
+        <li data-state="waiting"><b>일일 마감 양식 반영</b><small>대기</small></li>
+      </ol>
+    </section>
+
+    <section class="card result-card">
+      <div class="section-title">
+        <span>3</span>
+        <div>
+          <h2>검증 결과</h2>
+          <p>업로드 파일 기준으로 반영 전 확인해야 할 내용입니다.</p>
+        </div>
+      </div>
+
+      <div class="summary-grid">
+        <div><small>파일명</small><strong id="resultFileName">브랜아크_맛집밥상_발주서_260702.xlsx</strong></div>
+        <div><small>중복 파일</small><strong>중복 없음</strong></div>
+        <div><small>총 품목수</small><strong>9개</strong></div>
+        <div><small>총 수량</small><strong>135개</strong></div>
+      </div>
+
+      <ul class="check-list">
+        <li class="success">운송장 / 출고일지 수량 일치</li>
+        <li class="success">단가표 매칭 완료</li>
+        <li class="success">일일 마감 양식 반영 가능</li>
+        <li class="warning">판매처 정보가 없으면 판매처별 집계는 생성하지 않음</li>
+      </ul>
+    </section>
+
+    <section class="card table-card">
+      <div class="section-title">
+        <span>4</span>
+        <div>
+          <h2>일일 마감 추가 예정 내용</h2>
+          <p>일일 마감 양식에 추가될 데이터 미리보기입니다.</p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>주문일</th>
+              <th>상품명</th>
+              <th>수량</th>
+              <th>공급단가</th>
+              <th>공급가 합계</th>
+              <th>비고</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>2026-07-02</td><td>아삭아삭 궁채장아찌 4kg</td><td>37</td><td>8,800</td><td>325,600</td><td>일치</td></tr>
+            <tr><td></td><td>아삭아삭 궁채장아찌 1kg</td><td>50</td><td>2,200</td><td>110,000</td><td>일치</td></tr>
+            <tr><td></td><td>아삭아삭 궁채장아찌 10kg</td><td>25</td><td>21,500</td><td>537,500</td><td>일치</td></tr>
+            <tr><td></td><td>김밥집 궁채 2kg</td><td>6</td><td>7,425</td><td>44,550</td><td>일치</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card table-card">
+      <div class="section-title">
+        <span>5</span>
+        <div>
+          <h2>단가표 검증</h2>
+          <p>단가표는 전체 표기하고, 아래에 검증 문구를 함께 표시합니다.</p>
+        </div>
+      </div>
+
+      <div class="table-wrap compact">
+        <table>
+          <thead>
+            <tr><th>상품명</th><th>공급단가</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>아삭아삭 궁채장아찌 4kg</td><td>8,800원</td></tr>
+            <tr><td>아삭아삭 궁채장아찌 1kg</td><td>2,200원</td></tr>
+            <tr><td>아삭아삭 궁채장아찌 10kg</td><td>21,500원</td></tr>
+            <tr><td>김밥집 궁채 2kg</td><td>7,425원</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rule-box">
+        <strong>검증 내용</strong>
+        <p>“아삭아삭 궁채장아찌 4kg” = 8,800원</p>
+        <p>“김밥집 궁채 2kg” = 7,425원</p>
+      </div>
+    </section>
+
+    <section class="card error-card">
+      <div class="section-title">
+        <span>!</span>
+        <div>
+          <h2>오류 메시지 규칙</h2>
+          <p>자동화 차단 시 사용자에게 바로 보여줄 문구입니다.</p>
+        </div>
+      </div>
+      <div class="error-grid">
+        <span>중복된 파일명입니다.</span>
+        <span>지원하지 않는 파일 형식입니다.</span>
+        <span>운송장 시트를 찾을 수 없습니다.</span>
+        <span>출고일지 시트를 찾을 수 없습니다.</span>
+        <span>상품명1 컬럼을 찾을 수 없습니다.</span>
+        <span>일일 마감 양식이 변경되었습니다.</span>
+      </div>
+    </section>
+  </main>
+
+  <script src="./web/closing-ledger/script.js"></script>
+</body>
+</html>

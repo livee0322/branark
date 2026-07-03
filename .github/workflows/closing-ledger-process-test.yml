@@ -21,7 +21,7 @@ on:
         default: |
           주문일,판매처,주문번호,상품명,수량
           2026-07-03,브랜아크몰,ORDER-1001,김밥집 궁채 2kg_2,1
-          2026-07-03,브랜아크몰,ORDER-1002,아삭아삭 궁채장아찌 1kg,3
+          2026-07-03,브랜아크몰,ORDER-1002,아삭아삭 궁채장아찌 10KG,3
       order_date:
         description: "manual_payload 모드 주문일"
         required: false
@@ -41,7 +41,7 @@ on:
       allow_duplicate_file:
         description: "같은 파일명이 이미 있어도 생성 허용"
         required: true
-        default: "false"
+        default: "true"
         type: choice
         options:
           - "false"

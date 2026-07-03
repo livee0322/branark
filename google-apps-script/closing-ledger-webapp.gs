@@ -36,7 +36,9 @@ var SOURCE_HEADER_ALIASES = {
 };
 var PRICE_HEADER_ALIASES = {
   productName: ['상품명', '제품명', '품목명'],
-  supplyPrice: ['공급단가', '단가', '공급가', '매입가']
+  spec: ['규격', '옵션', '용량'],
+  supplyPrice: ['공급단가', '단가', '공급가', '매입가'],
+  vat: ['부가세', 'vat']
 };
 
 function doGet(e) {
@@ -285,7 +287,7 @@ function runAutoClosingLedgerProcess_(payload, props, mode) {
 
   try {
     var parsedResult = parseOrderFile_(uploaded, payload, keepTemporaryFiles);
-    temporaryFileIds = parsedResult.temporaryFileIds.slice();
+    temporaryFileIds = (parsedResult.temporaryFileIds || []).slice();
     warnings = warnings.concat(parsedResult.warnings);
     errors = errors.concat(parsedResult.errors);
 
@@ -334,6 +336,7 @@ function runAutoClosingLedgerProcess_(payload, props, mode) {
         sourceRowCount: parsedResult.sourceRowCount,
         normalizedRowCount: priceResult.rows.length
       },
+      comparison: parsedResult.comparison,
       matched: {
         matchedCount: priceResult.matchedCount,
         unmatchedCount: priceResult.unmatchedCount
@@ -342,6 +345,16 @@ function runAutoClosingLedgerProcess_(payload, props, mode) {
       rows: priceResult.rows,
       aggregatedItems: aggregatedResult.aggregatedItems,
       priceMatches: priceResult.priceMatches,
+      debug: {
+        parsedSheets: parsedResult.parsedSheets || [],
+        comparison: parsedResult.comparison,
+        price: priceResult.debug || {},
+        uploaded: {
+          fileId: uploaded.fileId,
+          fileName: uploaded.fileName,
+          temporarySpreadsheetIds: temporaryFileIds
+        }
+      },
       warnings: dedupeIssueList_(warnings),
       errors: dedupeIssueList_(errors)
     };
@@ -480,7 +493,11 @@ function parseCsvContentAsRows_(csvContent, fileName) {
       values: rows
     };
     var parsed = parseSheetValues_(sheetData, fileName);
+    parsed.sheetName = 'CSV';
     parsed.sourceSheetNames = ['CSV'];
+    parsed.temporaryFileIds = [];
+    parsed.parsedSheets = [buildParsedSheetDebug_(sheetData.name, parsed)];
+    parsed.comparison = buildSheetComparison_([parsed], []);
     return parsed;
   } catch (error) {
     throw appError_('CSV_PARSE_FAILED', 'CSV 파일을 읽지 못했습니다.', error.message);
@@ -495,7 +512,6 @@ function parseSpreadsheetBlobAsRows_(blob, fileName, keepTemporaryFiles) {
     var sheets = spreadsheet.getSheets();
     var candidateSheets = [];
     var sheetNameIndex = {};
-    var allRows = [];
     var warnings = [];
     var errors = [];
 
@@ -541,20 +557,32 @@ function parseSpreadsheetBlobAsRows_(blob, fileName, keepTemporaryFiles) {
       }
     }
 
+    var parsedSheets = [];
     for (var parseIndex = 0; parseIndex < uniqueCandidates.length; parseIndex += 1) {
       var parsedSheet = parseSheetValues_(uniqueCandidates[parseIndex], fileName);
-      allRows = allRows.concat(parsedSheet.rows);
+      parsedSheet.sheetName = uniqueCandidates[parseIndex].name;
+      parsedSheets.push(parsedSheet);
       warnings = warnings.concat(parsedSheet.warnings);
       errors = errors.concat(parsedSheet.errors);
     }
 
+    var selected = selectPrimaryAndValidationSheets_(parsedSheets);
+    var primaryRows = flattenParsedSheetRows_(selected.primarySheets);
+    var comparison = buildSheetComparison_(selected.primarySheets, selected.validationSheets);
+
+    if (selected.validationSheets.length && !comparison.quantityMatched) {
+      errors.push(issue_('QUANTITY_COMPARISON_MISMATCH', '운송장 기준 수량과 출고일지 합산 수량이 일치하지 않아 반영을 중단했습니다.'));
+    }
+
     return {
-      rows: allRows,
+      rows: primaryRows,
       warnings: warnings,
       errors: errors,
-      sourceRowCount: allRows.length,
+      sourceRowCount: primaryRows.length,
       sourceSheetNames: uniqueCandidates.map(function(candidate) { return candidate.name; }),
-      temporaryFileIds: keepTemporaryFiles ? [tempSpreadsheetId] : [tempSpreadsheetId]
+      parsedSheets: parsedSheets.map(function(item) { return buildParsedSheetDebug_(item.sheetName, item); }),
+      comparison: comparison,
+      temporaryFileIds: [tempSpreadsheetId]
     };
   } catch (error) {
     if (!tempSpreadsheetId) {
@@ -632,6 +660,7 @@ function parseSheetValues_(sheetData, fileName) {
     }
 
     var normalized = normalizeProductName_(rawProductName);
+    var normalizedOption = normalizeSpecText_(optionName);
     var finalQuantity = quantityValue * normalized.quantityMultiplier;
     var amountValue = toNumberStrict_(amountText);
 
@@ -644,6 +673,9 @@ function parseSheetValues_(sheetData, fileName) {
       rawProductName: rawProductName,
       optionName: optionName,
       normalizedProductName: normalized.name,
+      compactProductName: normalized.compactName,
+      normalizedOptionName: normalizedOption.text,
+      compactOptionName: normalizedOption.compactText,
       quantity: finalQuantity,
       amount: isFinite(amountValue) ? amountValue : null
     });
@@ -653,7 +685,9 @@ function parseSheetValues_(sheetData, fileName) {
     rows: rows,
     warnings: warnings,
     errors: errors,
-    sourceRowCount: rows.length
+    sourceRowCount: rows.length,
+    headerRowNumber: headerInfo ? headerInfo.headerRowNumber : null,
+    columns: headerInfo ? headerInfo.columns : {}
   };
 }
 
@@ -670,17 +704,20 @@ function aggregateParsedRows_(rows, fileName, fileId) {
       continue;
     }
     var orderDate = row.orderDate || inferDateFromFileName_(fileName) || formatDate_(new Date(), 'yyyy-MM-dd');
-    var key = [orderDate, row.normalizedProductName].join('||');
+    var normalizedSpec = row.normalizedOptionName || '';
+    var key = [orderDate, row.normalizedProductName, normalizedSpec].join('||');
     if (!map[key]) {
       map[key] = {
         orderDate: orderDate,
         productName: row.rawProductName,
         normalizedProductName: row.normalizedProductName,
+        normalizedSpec: normalizedSpec,
         quantity: 0,
         rawProductNames: {},
         sourceSheetNames: {},
         orderNumbers: {},
         salesChannels: {},
+        optionNames: {},
         memoParts: []
       };
     }
@@ -693,6 +730,9 @@ function aggregateParsedRows_(rows, fileName, fileId) {
     }
     if (row.salesChannel) {
       map[key].salesChannels[row.salesChannel] = true;
+    }
+    if (row.optionName) {
+      map[key].optionNames[row.optionName] = true;
     }
   }
 
@@ -707,11 +747,14 @@ function aggregateParsedRows_(rows, fileName, fileId) {
       orderDate: item.orderDate,
       productName: rawNames[0],
       normalizedProductName: item.normalizedProductName,
+      spec: Object.keys(item.optionNames)[0] || '',
+      normalizedSpec: item.normalizedSpec,
       quantity: item.quantity,
       rawProductNames: rawNames,
       sourceSheetNames: Object.keys(item.sourceSheetNames),
       orderNumbers: Object.keys(item.orderNumbers),
       salesChannels: Object.keys(item.salesChannels),
+      optionNames: Object.keys(item.optionNames),
       memoBase: '원본 파일명: ' + fileName + ' / 원본 시트: ' + Object.keys(item.sourceSheetNames).join(', ') + ' / Drive file ID: ' + fileId
     });
   }
@@ -733,40 +776,50 @@ function aggregateParsedRows_(rows, fileName, fileId) {
 
 function matchPrices_(rows, priceSheetId, keepTemporaryFiles) {
   var priceResource = readPriceResource_(priceSheetId, keepTemporaryFiles);
-  var priceMap = priceResource.priceMap;
-  var normalizedPriceMap = priceResource.normalizedPriceMap;
   var resultRows = [];
   var priceMatches = [];
   var warnings = [];
   var errors = [];
   var matchedCount = 0;
   var unmatchedCount = 0;
+  var unmatchedItems = [];
 
   for (var i = 0; i < rows.length; i += 1) {
     var item = rows[i];
-    var exact = priceMap[item.productName];
-    var normalized = normalizedPriceMap[item.normalizedProductName];
-    var matched = exact || normalized;
+    var matched = findPriceMatch_(item, priceResource);
     if (!matched) {
       unmatchedCount += 1;
       errors.push(issue_('PRICE_NOT_FOUND', '단가표에서 상품명을 찾지 못했습니다: ' + item.normalizedProductName));
-      priceMatches.push({
+      unmatchedItems.push({
         productName: item.productName,
         normalizedProductName: item.normalizedProductName,
+        spec: item.spec || ''
+      });
+      priceMatches.push({
+        orderProductName: item.productName,
+        normalizedOrderProductName: item.normalizedProductName,
+        priceProductName: '',
+        priceSpec: '',
+        quantity: item.quantity,
         matched: false,
         matchedBy: '',
-        supplyPrice: null
+        supplyPrice: null,
+        vat: null,
+        totalPrice: null,
+        status: '확인 필요'
       });
       continue;
     }
 
     matchedCount += 1;
-    var supplyPrice = matched.price;
+    var supplyPrice = matched.record.supplyPrice;
     var memo = item.memoBase + ' / 처리 시각: ' + formatNow_();
     resultRows.push({
       orderDate: item.orderDate,
       productName: item.productName,
       normalizedProductName: item.normalizedProductName,
+      priceProductName: matched.record.productName,
+      priceSpec: matched.record.spec,
       quantity: item.quantity,
       supplyPrice: supplyPrice,
       totalPrice: item.quantity * supplyPrice,
@@ -774,11 +827,17 @@ function matchPrices_(rows, priceSheetId, keepTemporaryFiles) {
       sourceSheetName: item.sourceSheetNames.join(', ')
     });
     priceMatches.push({
-      productName: item.productName,
-      normalizedProductName: item.normalizedProductName,
+      orderProductName: item.productName,
+      normalizedOrderProductName: item.normalizedProductName,
+      priceProductName: matched.record.productName,
+      priceSpec: matched.record.spec,
+      quantity: item.quantity,
       matched: true,
       matchedBy: matched.by,
-      supplyPrice: supplyPrice
+      supplyPrice: supplyPrice,
+      vat: matched.record.vat,
+      totalPrice: item.quantity * supplyPrice,
+      status: matched.by === 'product+spec' ? '정상 매칭' : '상품명 기준 매칭'
     });
   }
 
@@ -789,7 +848,17 @@ function matchPrices_(rows, priceSheetId, keepTemporaryFiles) {
     unmatchedCount: unmatchedCount,
     warnings: warnings,
     errors: errors,
-    temporaryFileIds: priceResource.temporaryFileIds
+    temporaryFileIds: priceResource.temporaryFileIds,
+    debug: {
+      priceSheetId: priceResource.id,
+      priceSheetName: priceResource.name,
+      priceSheetType: priceResource.type,
+      priceSheetTabName: priceResource.sheetName,
+      headerRowNumber: priceResource.headerRowNumber,
+      columns: priceResource.columns,
+      temporaryFileIds: priceResource.temporaryFileIds,
+      unmatchedItems: unmatchedItems
+    }
   };
 }
 
@@ -824,8 +893,9 @@ function buildPriceMapFromSpreadsheet_(spreadsheet, temporaryFileIds) {
     throw appError_('PRICE_HEADER_NOT_FOUND', '단가표에서 상품명/공급단가 헤더를 찾지 못했습니다.');
   }
 
-  var priceMap = {};
-  var normalizedPriceMap = {};
+  var combinedMap = {};
+  var productMap = {};
+  var records = [];
   var previewRows = [];
 
   for (var rowIndex = headerInfo.headerRowIndex + 1; rowIndex < values.length; rowIndex += 1) {
@@ -834,19 +904,23 @@ function buildPriceMapFromSpreadsheet_(spreadsheet, temporaryFileIds) {
       continue;
     }
     var productName = getRowCell_(row, headerInfo.columns.productName);
+    var spec = getRowCell_(row, headerInfo.columns.spec);
     var supplyPrice = toNumberStrict_(getRowCell_(row, headerInfo.columns.supplyPrice));
+    var vat = toNumberStrict_(getRowCell_(row, headerInfo.columns.vat));
     if (!productName || !isFinite(supplyPrice)) {
       continue;
     }
-    var normalized = normalizeProductName_(productName).name;
-    if (!priceMap[productName]) {
-      priceMap[productName] = { price: supplyPrice, by: 'exact' };
-    }
-    if (!normalizedPriceMap[normalized]) {
-      normalizedPriceMap[normalized] = { price: supplyPrice, by: 'normalized' };
-    }
+    var record = {
+      productName: productName,
+      spec: spec,
+      supplyPrice: supplyPrice,
+      vat: isFinite(vat) ? vat : null
+    };
+    records.push(record);
+    assignPriceMapEntries_(combinedMap, buildProductMatchSignatures_(productName, spec), record);
+    assignPriceMapEntries_(productMap, buildProductMatchSignatures_(productName, ''), record);
     if (previewRows.length < 5) {
-      previewRows.push([productName, supplyPrice]);
+      previewRows.push([productName, spec, supplyPrice, isFinite(vat) ? vat : '']);
     }
   }
 
@@ -855,10 +929,13 @@ function buildPriceMapFromSpreadsheet_(spreadsheet, temporaryFileIds) {
     name: spreadsheet.getName(),
     type: 'spreadsheet',
     sheetName: sheet.getName(),
-    priceMap: priceMap,
-    normalizedPriceMap: normalizedPriceMap,
+    combinedMap: combinedMap,
+    productMap: productMap,
+    records: records,
     previewRows: previewRows,
-    temporaryFileIds: temporaryFileIds
+    temporaryFileIds: temporaryFileIds,
+    headerRowNumber: headerInfo.headerRowNumber,
+    columns: headerInfo.columns
   };
 }
 
@@ -1013,7 +1090,200 @@ function normalizeProductName_(rawName) {
 
   return {
     name: text,
+    compactName: normalizeLooseText_(text),
     quantityMultiplier: multiplier
+  };
+}
+
+function normalizeSpecText_(value) {
+  var text = String(value || '').trim().replace(/\s+/g, ' ');
+  return {
+    text: text,
+    compactText: normalizeLooseText_(text)
+  };
+}
+
+function normalizeLooseText_(value) {
+  return String(value || '')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function stripBracketText_(value) {
+  return String(value || '')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildProductMatchSignatures_(productName, spec) {
+  var signatures = [];
+  var candidates = [
+    [productName, spec].join(' ').trim(),
+    productName,
+    [stripBracketText_(productName), spec].join(' ').trim(),
+    stripBracketText_(productName)
+  ];
+  for (var i = 0; i < candidates.length; i += 1) {
+    var signature = normalizeLooseText_(candidates[i]);
+    if (signature && signatures.indexOf(signature) < 0) {
+      signatures.push(signature);
+    }
+  }
+  return signatures;
+}
+
+function assignPriceMapEntries_(targetMap, signatures, record) {
+  for (var i = 0; i < signatures.length; i += 1) {
+    if (!targetMap[signatures[i]]) {
+      targetMap[signatures[i]] = record;
+    }
+  }
+}
+
+function findPriceMatch_(item, priceResource) {
+  var productSpecCandidates = buildProductMatchSignatures_(item.productName, item.spec || '')
+    .concat(buildProductMatchSignatures_(item.normalizedProductName, item.normalizedSpec || ''));
+  for (var i = 0; i < productSpecCandidates.length; i += 1) {
+    var combinedRecord = priceResource.combinedMap[productSpecCandidates[i]];
+    if (combinedRecord) {
+      return { record: combinedRecord, by: 'product+spec' };
+    }
+  }
+
+  var productOnlyCandidates = buildProductMatchSignatures_(item.productName, '')
+    .concat(buildProductMatchSignatures_(item.normalizedProductName, ''));
+  for (var j = 0; j < productOnlyCandidates.length; j += 1) {
+    var productRecord = priceResource.productMap[productOnlyCandidates[j]];
+    if (productRecord) {
+      return { record: productRecord, by: 'product-only' };
+    }
+  }
+
+  return null;
+}
+
+function selectPrimaryAndValidationSheets_(parsedSheets) {
+  var waybillSheets = [];
+  var validationSheets = [];
+
+  for (var i = 0; i < parsedSheets.length; i += 1) {
+    var sheetName = parsedSheets[i].sheetName;
+    if (sheetName === '운송장') {
+      waybillSheets.push(parsedSheets[i]);
+    } else if (sheetName === '출고일지' || sheetName === '출고일지(2)') {
+      validationSheets.push(parsedSheets[i]);
+    }
+  }
+
+  if (waybillSheets.length) {
+    return {
+      primarySheets: [waybillSheets[0]],
+      validationSheets: validationSheets
+    };
+  }
+
+  if (validationSheets.length) {
+    return {
+      primarySheets: validationSheets,
+      validationSheets: []
+    };
+  }
+
+  return {
+    primarySheets: parsedSheets.slice(0, 1),
+    validationSheets: parsedSheets.slice(1)
+  };
+}
+
+function flattenParsedSheetRows_(parsedSheets) {
+  var rows = [];
+  for (var i = 0; i < parsedSheets.length; i += 1) {
+    rows = rows.concat(parsedSheets[i].rows || []);
+  }
+  return rows;
+}
+
+function buildSheetComparison_(primarySheets, validationSheets) {
+  var primaryRows = flattenParsedSheetRows_(primarySheets);
+  var validationRows = flattenParsedSheetRows_(validationSheets);
+  var primaryMap = buildQuantityMap_(primaryRows);
+  var validationMap = buildQuantityMap_(validationRows);
+  var differences = [];
+  var keys = {};
+  var key;
+
+  for (key in primaryMap) {
+    if (primaryMap.hasOwnProperty(key)) {
+      keys[key] = true;
+    }
+  }
+  for (key in validationMap) {
+    if (validationMap.hasOwnProperty(key)) {
+      keys[key] = true;
+    }
+  }
+
+  for (key in keys) {
+    if (!keys.hasOwnProperty(key)) {
+      continue;
+    }
+    var primaryQuantity = primaryMap[key] ? primaryMap[key].quantity : 0;
+    var validationQuantity = validationMap[key] ? validationMap[key].quantity : 0;
+    if (primaryQuantity !== validationQuantity) {
+      differences.push({
+        key: key,
+        productName: primaryMap[key] ? primaryMap[key].productName : (validationMap[key] ? validationMap[key].productName : ''),
+        primaryQuantity: primaryQuantity,
+        validationQuantity: validationQuantity
+      });
+    }
+  }
+
+  return {
+    primarySheet: primarySheets.map(function(item) { return item.sheetName; }).join(', '),
+    validationSheets: validationSheets.map(function(item) { return item.sheetName; }),
+    primaryQuantityTotal: sumRowQuantity_(primaryRows),
+    validationQuantityTotal: sumRowQuantity_(validationRows),
+    quantityMatched: validationSheets.length ? differences.length === 0 : true,
+    comparisonPerformed: validationSheets.length > 0,
+    differences: differences
+  };
+}
+
+function buildQuantityMap_(rows) {
+  var map = {};
+  for (var i = 0; i < rows.length; i += 1) {
+    var key = [rows[i].normalizedProductName || '', rows[i].normalizedOptionName || ''].join('||');
+    if (!map[key]) {
+      map[key] = {
+        productName: rows[i].rawProductName || rows[i].normalizedProductName || '',
+        quantity: 0
+      };
+    }
+    map[key].quantity += Number(rows[i].quantity || 0);
+  }
+  return map;
+}
+
+function sumRowQuantity_(rows) {
+  var total = 0;
+  for (var i = 0; i < rows.length; i += 1) {
+    total += Number(rows[i].quantity || 0);
+  }
+  return total;
+}
+
+function buildParsedSheetDebug_(sheetName, parsedSheet) {
+  return {
+    sheetName: sheetName,
+    rowCount: parsedSheet.sourceRowCount || 0,
+    headerRowNumber: parsedSheet.headerRowNumber || null,
+    columns: parsedSheet.columns || {}
   };
 }
 
@@ -1112,14 +1382,17 @@ function isRowEmpty_(row) {
 
 function collectBlockingErrors_(errors) {
   var blockingCodes = {
+    SOURCE_SHEET_NOT_FOUND: true,
     SOURCE_HEADER_NOT_FOUND: true,
     PRODUCT_NAME_NOT_FOUND: true,
     INVALID_QUANTITY: true,
     PRICE_NOT_FOUND: true,
+    PRICE_HEADER_NOT_FOUND: true,
     DAILY_SHEET_ACCESS_FAILED: true,
     DAILY_SHEET_HEADER_MISSING: true,
     FILE_CONVERSION_FAILED: true,
     FILE_CONVERSION_UNAVAILABLE: true,
+    QUANTITY_COMPARISON_MISMATCH: true,
     NO_NORMALIZED_ROWS: true,
     NO_APPEND_ROWS: true
   };

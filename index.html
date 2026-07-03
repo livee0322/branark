@@ -11,27 +11,30 @@
     <section class="hero-card">
       <p class="eyebrow">BRANARK CLOSING LEDGER AUTOMATION</p>
       <h1>브랜아크 발주서 파일 분석 및 일일마감 자동 반영</h1>
-      <p class="hero-copy">발주서 파일을 업로드하면 브랜아크 전용 Apps Script가 파일을 분석하고, 상품별 집계와 단가 매칭을 거쳐 일일마감 양식에 자동 반영합니다.</p>
+      <p class="hero-copy">발주서 파일을 업로드하면 브랜아크 전용 Apps Script가 파일을 저장하고, 시트를 읽고, 단가표를 대조한 뒤 일일마감 반영 예정 행까지 정리합니다.</p>
     </section>
 
     <section class="notice-card">
-      <strong>운영 기본값</strong>
-      <p>이 페이지는 자동 분석 모드가 기본입니다. 수동 테스트 입력 없이 파일 업로드만으로 분석, 검토, 반영 결과를 확인하도록 구성했습니다.</p>
+      <strong>안내</strong>
+      <div>
+        <p>현재 운영 기본값은 자동 분석 모드입니다. 상품명, 수량, 공급단가를 화면에서 따로 입력하지 않고 파일 내용으로만 처리합니다.</p>
+        <p>금액은 공급단가표를 기준으로 검증하며, 단가표에서 찾지 못한 상품이나 수량 불일치가 있으면 일일마감 반영을 차단합니다.</p>
+      </div>
     </section>
 
     <section class="card">
       <div class="section-title">
-        <span>0</span>
+        <span>1</span>
         <div>
-          <h2>자동화 연결 점검</h2>
-          <p>페이지 로드 시 health check를 실행해 Drive, 일일마감 시트, 단가표, 페이지 업로드 허용 상태를 실제 응답 기준으로 확인합니다.</p>
+          <h2>자동화 연결 상태</h2>
+          <p>페이지를 열면 health check를 실행해 Drive, 일일마감 시트, 단가표, 페이지 업로드 허용 상태를 실제 응답으로 확인합니다.</p>
         </div>
       </div>
 
       <div class="connection-panel" id="connectionPanel" data-state="loading">
         <div>
           <small>Apps Script 연결 상태</small>
-          <strong id="connectionStatus">점검 중</strong>
+          <strong id="connectionStatus">확인 중</strong>
         </div>
         <p id="connectionDescription">브랜아크 자동화 연결 상태를 확인하고 있습니다.</p>
       </div>
@@ -39,18 +42,18 @@
       <div class="health-grid">
         <article class="health-card" id="healthDriveCard" data-state="waiting">
           <small>Google Drive</small>
-          <strong id="healthDriveTitle">확인 전</strong>
-          <p id="healthDriveDescription">발주서 저장 폴더 접근 상태를 점검합니다.</p>
+          <strong id="healthDriveTitle">확인 대기</strong>
+          <p id="healthDriveDescription">발주서 저장 폴더 접근 상태를 확인합니다.</p>
         </article>
         <article class="health-card" id="healthDailySheetCard" data-state="waiting">
           <small>일일마감 시트</small>
-          <strong id="healthDailySheetTitle">확인 전</strong>
-          <p id="healthDailySheetDescription">헤더 구조와 반영 대상 시트를 점검합니다.</p>
+          <strong id="healthDailySheetTitle">확인 대기</strong>
+          <p id="healthDailySheetDescription">반영 대상 시트와 헤더 구조를 확인합니다.</p>
         </article>
         <article class="health-card" id="healthPriceCard" data-state="waiting">
-          <small>단가표</small>
-          <strong id="healthPriceTitle">확인 전</strong>
-          <p id="healthPriceDescription">단가표 파일 또는 시트 접근 상태를 점검합니다.</p>
+          <small>공급단가표</small>
+          <strong id="healthPriceTitle">확인 대기</strong>
+          <p id="healthPriceDescription">단가표 접근 상태와 미리보기 가능 여부를 확인합니다.</p>
         </article>
       </div>
 
@@ -64,18 +67,18 @@
 
     <section class="card upload-card">
       <div class="section-title">
-        <span>1</span>
+        <span>2</span>
         <div>
           <h2>발주서 업로드</h2>
-          <p>지원 형식은 csv, xlsx, xls이며 업로드 후 자동 분석과 일일마감 반영이 한 번에 진행됩니다.</p>
+          <p>지원 형식은 csv, xlsx, xls이며 8MB 이하 파일만 업로드할 수 있습니다.</p>
         </div>
       </div>
 
       <label class="upload-box" for="orderFile">
         <input id="orderFile" type="file" accept=".csv,.xlsx,.xls" />
         <span class="upload-icon">UPLOAD</span>
-        <strong id="fileName">발주서 파일을 선택하세요</strong>
-        <em>최대 8MB까지 업로드할 수 있으며, 중복 파일명은 옵션에 따라 차단 또는 허용됩니다.</em>
+        <strong id="fileName">발주서 파일을 선택해 주세요</strong>
+        <em>업로드 후 파일 분석, 단가 검증, 일일마감 반영 미리보기, 최종 반영까지 순서대로 진행합니다.</em>
       </label>
 
       <div class="form-grid single-row">
@@ -87,56 +90,50 @@
 
       <div class="rule-box">
         <strong>처리 흐름</strong>
-        <p>발주서 업로드 → 파일 분석 → 상품별 집계 → 단가 매칭 → 일일마감 반영 예정 행 구성 → 검증 통과 시 일일마감 반영</p>
-        <p>상품명, 수량, 단가를 수동 입력하지 않아도 되며, 파일 내부 데이터 기준으로 자동 정리됩니다.</p>
-      </div>
-
-      <button id="validateButton" class="primary-button" type="button">발주서 업로드 및 자동 분석 시작</button>
-      <p id="uploadMessage" class="helper-text">자동화 연결이 정상이면 업로드 버튼이 활성화됩니다.</p>
-    </section>
-
-    <section class="card">
-      <div class="section-title">
-        <span>2</span>
-        <div>
-          <h2>실시간 처리 상태</h2>
-          <p>업로드 이후 단계별 진행 상황을 보여줍니다.</p>
-        </div>
+        <p>발주서 파일 업로드 → 파일 저장 및 시트 탐색 → 상품별 집계 → 공급단가표 검증 → 일일마감 반영 예정 행 구성 → 검증 통과 시 일일마감 시트 반영</p>
+        <p>운송장이 있으면 운송장을 기준 수량으로 사용하고, 출고일지/출고일지(2)는 검증용 비교 데이터로만 사용합니다.</p>
       </div>
 
       <ol class="status-list" id="statusList">
-        <li data-state="waiting"><b>파일 형식 및 업로드 조건 확인</b><small>대기</small></li>
+        <li data-state="waiting"><b>파일 조건 확인</b><small>대기</small></li>
         <li data-state="waiting"><b>Apps Script 요청 전송</b><small>대기</small></li>
         <li data-state="waiting"><b>파일 분석 및 시트 탐색</b><small>대기</small></li>
-        <li data-state="waiting"><b>상품 집계 및 단가 매칭</b><small>대기</small></li>
+        <li data-state="waiting"><b>수량 비교 및 단가 검증</b><small>대기</small></li>
         <li data-state="waiting"><b>일일마감 반영 예정 행 구성</b><small>대기</small></li>
         <li data-state="waiting"><b>일일마감 시트 반영</b><small>대기</small></li>
       </ol>
+
+      <button id="validateButton" class="primary-button" type="button">발주서 업로드 및 자동 분석 시작</button>
+      <p id="uploadMessage" class="helper-text">자동화 연결 상태가 정상일 때 업로드 버튼이 활성화됩니다.</p>
     </section>
 
     <section class="card">
       <div class="section-title">
         <span>3</span>
         <div>
-          <h2>업로드 파일 정보</h2>
-          <p>현재 처리한 발주서 파일과 소스 시트 정보를 표시합니다.</p>
+          <h2>분석 결과 요약</h2>
+          <p>업로드 파일 정보, 분석 대상 시트, 수량 비교 요약, 확인 필요 항목을 함께 보여줍니다.</p>
         </div>
       </div>
 
       <div class="summary-grid" id="fileInfoGrid">
         <div><small>파일명</small><strong id="summaryFileName">-</strong></div>
         <div><small>처리 모드</small><strong id="summaryMode">-</strong></div>
-        <div><small>소스 시트</small><strong id="summarySourceSheets">-</strong></div>
-        <div><small>읽은 원본 행 수</small><strong id="summarySourceRows">-</strong></div>
+        <div><small>분석 시트</small><strong id="summarySourceSheets">-</strong></div>
+        <div><small>원본 행 수</small><strong id="summarySourceRows">-</strong></div>
       </div>
-    </section>
 
-    <section class="card table-card">
-      <div class="section-title">
-        <span>4</span>
-        <div>
-          <h2>분석된 상품별 집계</h2>
-          <p>발주서에서 읽은 상품을 정규화한 뒤 집계한 결과입니다.</p>
+      <div class="comparison-box" id="comparisonBox" data-state="idle">
+        <div class="comparison-header">
+          <strong id="comparisonTitle">수량 비교 대기</strong>
+          <span id="comparisonStatusBadge" class="status-badge">대기</span>
+        </div>
+        <p id="comparisonDescription">발주서 분석 후 운송장과 출고일지 수량 비교 결과를 표시합니다.</p>
+        <div class="comparison-grid">
+          <div><small>기준 시트</small><strong id="comparisonPrimary">-</strong></div>
+          <div><small>검증 시트</small><strong id="comparisonValidation">-</strong></div>
+          <div><small>기준 수량 합계</small><strong id="comparisonPrimaryTotal">-</strong></div>
+          <div><small>검증 수량 합계</small><strong id="comparisonValidationTotal">-</strong></div>
         </div>
       </div>
 
@@ -147,12 +144,47 @@
               <th>주문일</th>
               <th>원본 상품명</th>
               <th>정규화 상품명</th>
+              <th>규격</th>
               <th>수량</th>
               <th>원본 시트</th>
             </tr>
           </thead>
           <tbody id="aggregateTableBody">
-            <tr><td colspan="5">아직 분석 결과가 없습니다.</td></tr>
+            <tr><td colspan="6">아직 분석 결과가 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="issuesPanel" class="issue-panel">
+        <p class="issue-empty">아직 오류나 확인 필요 항목이 없습니다.</p>
+      </div>
+    </section>
+
+    <section class="card table-card">
+      <div class="section-title">
+        <span>4</span>
+        <div>
+          <h2>단가표 검증</h2>
+          <p id="priceVerificationMessage">공급단가표를 기준으로 금액을 확인한 뒤 결과를 보여줍니다.</p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>발주서 상품명</th>
+              <th>단가표 상품명</th>
+              <th>규격</th>
+              <th>공급단가</th>
+              <th>부가세</th>
+              <th>발주 수량</th>
+              <th>공급가 합계</th>
+              <th>매칭 상태</th>
+            </tr>
+          </thead>
+          <tbody id="priceMatchTableBody">
+            <tr><td colspan="8">아직 단가 검증 결과가 없습니다.</td></tr>
           </tbody>
         </table>
       </div>
@@ -162,34 +194,8 @@
       <div class="section-title">
         <span>5</span>
         <div>
-          <h2>단가 매칭 결과</h2>
-          <p>정규화 상품명을 기준으로 단가표를 조회한 결과입니다.</p>
-        </div>
-      </div>
-
-      <div class="table-wrap compact">
-        <table>
-          <thead>
-            <tr>
-              <th>상품명</th>
-              <th>정규화 상품명</th>
-              <th>공급단가</th>
-              <th>매칭 상태</th>
-            </tr>
-          </thead>
-          <tbody id="priceMatchTableBody">
-            <tr><td colspan="4">아직 단가 매칭 결과가 없습니다.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card table-card">
-      <div class="section-title">
-        <span>6</span>
-        <div>
-          <h2>일일마감 반영 예정 행</h2>
-          <p>일일마감 시트에 추가할 최종 행입니다.</p>
+          <h2>일일마감 반영 미리보기</h2>
+          <p>아래 내용으로 일일마감 양식 첫 번째 시트에 반영됩니다.</p>
         </div>
       </div>
 
@@ -213,26 +219,12 @@
       </div>
     </section>
 
-    <section class="card">
-      <div class="section-title">
-        <span>7</span>
-        <div>
-          <h2>오류 및 확인 필요 항목</h2>
-          <p>반영 차단 사유와 검토가 필요한 항목을 함께 표시합니다.</p>
-        </div>
-      </div>
-
-      <div id="issuesPanel" class="issue-panel">
-        <p class="issue-empty">아직 표시할 오류나 경고가 없습니다.</p>
-      </div>
-    </section>
-
     <section class="card result-card">
       <div class="section-title">
-        <span>8</span>
+        <span>6</span>
         <div>
-          <h2>최종 반영 결과</h2>
-          <p>Drive 업로드와 일일마감 반영 결과를 요약합니다.</p>
+          <h2>반영 완료 결과</h2>
+          <p>Drive 저장 결과와 일일마감 반영 결과를 요약합니다.</p>
         </div>
       </div>
 
@@ -244,10 +236,33 @@
       </div>
 
       <div class="rule-box result-output-box">
-        <strong>응답 상세</strong>
+        <strong>응답 요약</strong>
         <pre id="resultOutput">아직 실행 전입니다.</pre>
       </div>
     </section>
+
+    <details class="developer-log">
+      <summary>개발자용 상세 로그 보기</summary>
+      <p class="developer-copy">이 영역은 오류 확인용입니다. 일반 작업자는 확인하지 않아도 됩니다.</p>
+      <div class="developer-grid">
+        <div class="rule-box">
+          <strong>Apps Script health check 응답</strong>
+          <pre id="developerHealthOutput">-</pre>
+        </div>
+        <div class="rule-box">
+          <strong>업로드 요청 payload 요약</strong>
+          <pre id="developerPayloadOutput">-</pre>
+        </div>
+        <div class="rule-box">
+          <strong>처리 상세 로그</strong>
+          <pre id="developerProcessOutput">-</pre>
+        </div>
+        <div class="rule-box">
+          <strong>원본 응답 JSON</strong>
+          <pre id="developerRawOutput">-</pre>
+        </div>
+      </div>
+    </details>
   </main>
 
   <script src="./web/closing-ledger/config.js"></script>

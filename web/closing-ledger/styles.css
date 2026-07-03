@@ -35,7 +35,7 @@ body {
 }
 
 .page-shell {
-  width: min(1120px, calc(100% - 32px));
+  width: min(1160px, calc(100% - 32px));
   margin: 0 auto;
   padding: 34px 0 72px;
 }
@@ -83,7 +83,7 @@ h1 {
   color: var(--muted);
   font-size: 17px;
   line-height: 1.68;
-  max-width: 720px;
+  max-width: 780px;
 }
 
 .notice-card {
@@ -213,7 +213,8 @@ h1 {
 }
 
 .health-card,
-.summary-grid div {
+.summary-grid div,
+.issue-card {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -226,7 +227,8 @@ h1 {
   word-break: break-word;
 }
 
-.health-card p {
+.health-card p,
+.issue-card p {
   color: var(--muted);
   line-height: 1.5;
 }
@@ -285,7 +287,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 74px;
+  min-width: 84px;
   height: 38px;
   padding: 0 16px;
   margin-bottom: 10px;
@@ -316,6 +318,10 @@ h1 {
   margin: 18px 0;
 }
 
+.single-row {
+  grid-template-columns: 1fr;
+}
+
 .form-field {
   display: grid;
   gap: 8px;
@@ -330,11 +336,6 @@ h1 {
   background: #fff;
   font-size: 15px;
   outline: none;
-}
-
-.form-field input:focus {
-  border-color: rgba(32, 91, 74, 0.6);
-  box-shadow: 0 0 0 3px rgba(32, 91, 74, 0.12);
 }
 
 .full-width {
@@ -426,15 +427,6 @@ h1 {
   color: var(--warning);
 }
 
-.status-list li[data-state="warning"] {
-  border-color: rgba(183, 121, 31, 0.22);
-  background: #fffaf0;
-}
-
-.status-list li[data-state="warning"] small {
-  color: var(--warning);
-}
-
 .status-list li[data-state="error"] {
   border-color: rgba(194, 65, 45, 0.22);
   background: var(--danger-soft);
@@ -442,10 +434,6 @@ h1 {
 
 .status-list li[data-state="error"] small {
   color: var(--danger);
-}
-
-.static-flow {
-  margin-top: 4px;
 }
 
 .summary-grid {
@@ -483,12 +471,12 @@ h1 {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 560px;
+  min-width: 640px;
   background: white;
 }
 
 .compact table {
-  min-width: 420px;
+  min-width: 520px;
 }
 
 th,
@@ -508,6 +496,38 @@ tr:last-child td {
   border-bottom: 0;
 }
 
+.issue-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.issue-empty {
+  color: var(--muted);
+}
+
+.issue-card strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.issue-error {
+  border-color: rgba(194, 65, 45, 0.22);
+  background: var(--danger-soft);
+}
+
+.issue-error strong {
+  color: var(--danger);
+}
+
+.issue-warning {
+  border-color: rgba(183, 121, 31, 0.22);
+  background: var(--warning-soft);
+}
+
+.issue-warning strong {
+  color: var(--warning);
+}
+
 .result-output-box pre {
   white-space: pre-wrap;
   word-break: break-word;
@@ -517,25 +537,10 @@ tr:last-child td {
   line-height: 1.55;
 }
 
-.error-grid {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.error-grid span {
-  display: block;
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: #fff6f4;
-  color: #8e2f21;
-  font-weight: 800;
-  line-height: 1.5;
-}
-
 @media (max-width: 920px) {
   .health-grid,
   .summary-grid,
   .compact-grid,
-  .form-grid,
   .error-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -563,7 +568,6 @@ tr:last-child td {
   .health-grid,
   .summary-grid,
   .compact-grid,
-  .form-grid,
   .error-grid {
     grid-template-columns: 1fr;
   }
@@ -573,6 +577,6 @@ tr:last-child td {
   }
 
   table {
-    min-width: 460px;
+    min-width: 520px;
   }
 }

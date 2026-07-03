@@ -1,22 +1,13 @@
 const fileInput = document.querySelector('#orderFile');
 const fileName = document.querySelector('#fileName');
-const resultFileName = document.querySelector('#resultFileName');
-const resultFileId = document.querySelector('#resultFileId');
-const resultSheetName = document.querySelector('#resultSheetName');
-const resultRow = document.querySelector('#resultRow');
-const resultOutput = document.querySelector('#resultOutput');
 const validateButton = document.querySelector('#validateButton');
 const uploadMessage = document.querySelector('#uploadMessage');
+const allowDuplicateInput = document.querySelector('#allowDuplicateFile');
 const statusItems = Array.from(document.querySelectorAll('#statusList li'));
+
 const connectionPanel = document.querySelector('#connectionPanel');
 const connectionStatus = document.querySelector('#connectionStatus');
 const connectionDescription = document.querySelector('#connectionDescription');
-
-const orderDateInput = document.querySelector('#orderDate');
-const productNameInput = document.querySelector('#productName');
-const quantityInput = document.querySelector('#quantity');
-const supplyPriceInput = document.querySelector('#supplyPrice');
-const allowDuplicateInput = document.querySelector('#allowDuplicateFile');
 
 const healthCheckedAt = document.querySelector('#healthCheckedAt');
 const healthAllowPageUpload = document.querySelector('#healthAllowPageUpload');
@@ -32,15 +23,29 @@ const healthDailySheetDescription = document.querySelector('#healthDailySheetDes
 const healthPriceCard = document.querySelector('#healthPriceCard');
 const healthPriceTitle = document.querySelector('#healthPriceTitle');
 const healthPriceDescription = document.querySelector('#healthPriceDescription');
-const pricePreviewBody = document.querySelector('#pricePreviewBody');
-const pricePreviewDescription = document.querySelector('#pricePreviewDescription');
 
-const allowedExtensions = ['xlsx', 'xls', 'csv'];
+const summaryFileName = document.querySelector('#summaryFileName');
+const summaryMode = document.querySelector('#summaryMode');
+const summarySourceSheets = document.querySelector('#summarySourceSheets');
+const summarySourceRows = document.querySelector('#summarySourceRows');
+
+const aggregateTableBody = document.querySelector('#aggregateTableBody');
+const priceMatchTableBody = document.querySelector('#priceMatchTableBody');
+const previewTableBody = document.querySelector('#previewTableBody');
+const issuesPanel = document.querySelector('#issuesPanel');
+
+const resultFileId = document.querySelector('#resultFileId');
+const resultSheetName = document.querySelector('#resultSheetName');
+const resultRowCount = document.querySelector('#resultRowCount');
+const resultWarningCount = document.querySelector('#resultWarningCount');
+const resultOutput = document.querySelector('#resultOutput');
+
 const runtimeConfig = window.BRANARK_CLOSING_LEDGER_CONFIG || {};
 const appsScriptWebAppUrl = String(runtimeConfig.appsScriptWebAppUrl || '').trim();
 const maxFileSizeBytes = Number(runtimeConfig.maxFileSizeBytes || 8 * 1024 * 1024);
 const healthTimeoutMs = Number(runtimeConfig.healthTimeoutMs || 15000);
 const requestTimeoutMs = Number(runtimeConfig.requestTimeoutMs || 120000);
+const allowedExtensions = ['csv', 'xlsx', 'xls'];
 
 let lastHealthResult = null;
 
@@ -69,6 +74,27 @@ function formatDateTime(value) {
   return String(value).replace('T', ' ');
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function setConnectionState(state, title, description) {
+  connectionPanel.dataset.state = state;
+  connectionStatus.textContent = title;
+  connectionDescription.textContent = description;
+}
+
+function setHealthCard(card, titleNode, descriptionNode, state, title, description) {
+  card.dataset.state = state;
+  titleNode.textContent = title;
+  descriptionNode.textContent = description;
+}
+
 function setStatus(index, state, label) {
   const item = statusItems[index];
   if (!item) {
@@ -91,142 +117,65 @@ function resetStatus() {
   });
 }
 
-function setToday() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  if (orderDateInput && !orderDateInput.value) {
-    orderDateInput.value = `${yyyy}-${mm}-${dd}`;
-  }
-}
+function resetResultSections() {
+  summaryFileName.textContent = '-';
+  summaryMode.textContent = '-';
+  summarySourceSheets.textContent = '-';
+  summarySourceRows.textContent = '-';
+  resultFileId.textContent = '-';
+  resultSheetName.textContent = '-';
+  resultRowCount.textContent = '-';
+  resultWarningCount.textContent = '-';
+  resultOutput.textContent = '아직 실행 전입니다.';
 
-function setConnectionState(state, title, description) {
-  if (connectionPanel) {
-    connectionPanel.dataset.state = state;
-  }
-  if (connectionStatus) {
-    connectionStatus.textContent = title;
-  }
-  if (connectionDescription) {
-    connectionDescription.textContent = description;
-  }
-}
-
-function setHealthCard(card, titleNode, descriptionNode, state, title, description) {
-  if (card) {
-    card.dataset.state = state;
-  }
-  if (titleNode) {
-    titleNode.textContent = title;
-  }
-  if (descriptionNode) {
-    descriptionNode.textContent = description;
-  }
-}
-
-function setPricePreviewRows(rows, note) {
-  if (!pricePreviewBody) {
-    return;
-  }
-
-  if (!rows || !rows.length) {
-    pricePreviewBody.innerHTML = '<tr><td colspan="2">검토용 단가표 미리보기를 불러오지 못했습니다.</td></tr>';
-    if (pricePreviewDescription) {
-      pricePreviewDescription.textContent = note || '단가표 파일은 접근되지만 화면 미리보기를 제공할 수 없는 상태일 수 있습니다.';
-    }
-    return;
-  }
-
-  const bodyRows = rows
-    .map((row) => {
-      const name = row[0] ? String(row[0]) : '-';
-      const price = row[1] !== undefined && row[1] !== null && row[1] !== '' ? `${formatNumber(Number(row[1]))}원` : '-';
-      return `<tr><td>${escapeHtml(name)}</td><td>${escapeHtml(price)}</td></tr>`;
-    })
-    .join('');
-
-  pricePreviewBody.innerHTML = bodyRows;
-  if (pricePreviewDescription) {
-    pricePreviewDescription.textContent = note || '단가표 상위 일부 행을 검토용으로 표시하고 있습니다.';
-  }
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  aggregateTableBody.innerHTML = '<tr><td colspan="5">아직 분석 결과가 없습니다.</td></tr>';
+  priceMatchTableBody.innerHTML = '<tr><td colspan="4">아직 단가 매칭 결과가 없습니다.</td></tr>';
+  previewTableBody.innerHTML = '<tr><td colspan="7">아직 반영 예정 행이 없습니다.</td></tr>';
+  issuesPanel.innerHTML = '<p class="issue-empty">아직 표시할 오류나 경고가 없습니다.</p>';
 }
 
 function validateAutomationConfig() {
   if (!appsScriptWebAppUrl) {
     setConnectionState('error', 'Apps Script URL 미설정', 'web/closing-ledger/config.js에 Apps Script /exec URL이 필요합니다.');
-    if (validateButton) {
-      validateButton.disabled = true;
-    }
+    validateButton.disabled = true;
     return { ok: false, message: 'Apps Script URL이 설정되지 않았습니다.' };
   }
 
   if (!appsScriptWebAppUrl.startsWith('https://script.google.com/') || !appsScriptWebAppUrl.includes('/exec')) {
     setConnectionState('error', 'Apps Script URL 형식 오류', 'Apps Script Web App URL은 https://script.google.com/.../exec 형식이어야 합니다.');
-    if (validateButton) {
-      validateButton.disabled = true;
-    }
+    validateButton.disabled = true;
     return { ok: false, message: 'Apps Script Web App URL 형식이 올바르지 않습니다.' };
   }
 
   return { ok: true };
 }
 
-async function runHealthCheck() {
-  const configState = validateAutomationConfig();
-  if (!configState.ok) {
-    uploadMessage.textContent = configState.message;
-    return;
+function validateFile(file) {
+  if (!file) {
+    throw new Error('파일을 먼저 선택해 주세요.');
   }
 
-  setConnectionState('loading', '자동화 상태 점검 중', 'Apps Script health check를 실행하고 있습니다.');
-  if (validateButton) {
-    validateButton.disabled = true;
+  const extension = getExtension(file.name);
+  if (!allowedExtensions.includes(extension)) {
+    throw new Error('지원하지 않는 파일 형식입니다. csv, xlsx, xls 파일만 업로드할 수 있습니다.');
   }
 
-  setHealthCard(healthDriveCard, healthDriveTitle, healthDriveDescription, 'processing', '점검 중', '발주서 저장 폴더 접근 상태를 확인하고 있습니다.');
-  setHealthCard(healthDailySheetCard, healthDailySheetTitle, healthDailySheetDescription, 'processing', '점검 중', '일일마감 시트 접근 상태를 확인하고 있습니다.');
-  setHealthCard(healthPriceCard, healthPriceTitle, healthPriceDescription, 'processing', '점검 중', '단가표 접근 상태를 확인하고 있습니다.');
-
-  try {
-    const result = await fetchHealthCheckJsonp(appsScriptWebAppUrl);
-    if (!result || result.ok !== true) {
-      throw mapAppsScriptError(result);
-    }
-
-    lastHealthResult = result;
-    renderHealthResult(result);
-
-    const isUploadReady = Boolean(result.healthOk);
-    if (validateButton) {
-      validateButton.disabled = !isUploadReady;
-    }
-
-    uploadMessage.textContent = isUploadReady
-      ? '자동화 설정이 확인되었습니다. 파일과 입력값을 검토한 뒤 업로드를 진행하세요.'
-      : '자동화 설정에 누락 또는 접근 오류가 있습니다. 화면의 점검 결과를 먼저 확인해 주세요.';
-  } catch (error) {
-    lastHealthResult = null;
-    const message = formatUserError(error);
-    setConnectionState('error', '자동화 연결 확인 실패', message);
-    setHealthCard(healthDriveCard, healthDriveTitle, healthDriveDescription, 'error', '확인 실패', 'health check 응답을 받지 못했습니다.');
-    setHealthCard(healthDailySheetCard, healthDailySheetTitle, healthDailySheetDescription, 'error', '확인 실패', 'health check 응답을 받지 못했습니다.');
-    setHealthCard(healthPriceCard, healthPriceTitle, healthPriceDescription, 'error', '확인 실패', 'health check 응답을 받지 못했습니다.');
-    setPricePreviewRows([], 'health check 실패로 단가표를 불러오지 못했습니다.');
-    if (validateButton) {
-      validateButton.disabled = true;
-    }
-    uploadMessage.textContent = message;
+  if (file.size > maxFileSizeBytes) {
+    throw new Error(`파일 용량은 8MB 이하여야 합니다. 현재 파일 용량은 ${formatFileSize(file.size)}입니다.`);
   }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      const base64 = value.includes(',') ? value.split(',').pop() : value;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function fetchHealthCheckJsonp(url) {
@@ -266,40 +215,78 @@ function fetchHealthCheckJsonp(url) {
   });
 }
 
+async function runHealthCheck() {
+  const configState = validateAutomationConfig();
+  if (!configState.ok) {
+    uploadMessage.textContent = configState.message;
+    return;
+  }
+
+  setConnectionState('loading', '자동화 상태 점검 중', 'Apps Script health check를 실행하고 있습니다.');
+  validateButton.disabled = true;
+
+  setHealthCard(healthDriveCard, healthDriveTitle, healthDriveDescription, 'processing', '점검 중', '발주서 저장 폴더를 확인하고 있습니다.');
+  setHealthCard(healthDailySheetCard, healthDailySheetTitle, healthDailySheetDescription, 'processing', '점검 중', '일일마감 시트 구조를 확인하고 있습니다.');
+  setHealthCard(healthPriceCard, healthPriceTitle, healthPriceDescription, 'processing', '점검 중', '단가표 접근 상태를 확인하고 있습니다.');
+
+  try {
+    const result = await fetchHealthCheckJsonp(appsScriptWebAppUrl);
+    if (!result || result.ok !== true) {
+      throw mapAppsScriptError(result);
+    }
+
+    lastHealthResult = result;
+    renderHealthResult(result);
+
+    const uploadReady = Boolean(result.healthOk);
+    validateButton.disabled = !uploadReady;
+    uploadMessage.textContent = uploadReady
+      ? '자동화 연결이 확인되었습니다. 발주서 파일을 업로드해 자동 분석을 시작하세요.'
+      : formatHealthBlockingMessage(result);
+  } catch (error) {
+    lastHealthResult = null;
+    const message = formatUserError(error);
+    setConnectionState('error', '자동화 연결 확인 실패', message);
+    setHealthCard(healthDriveCard, healthDriveTitle, healthDriveDescription, 'error', '확인 실패', 'health check 응답을 받지 못했습니다.');
+    setHealthCard(healthDailySheetCard, healthDailySheetTitle, healthDailySheetDescription, 'error', '확인 실패', 'health check 응답을 받지 못했습니다.');
+    setHealthCard(healthPriceCard, healthPriceTitle, healthPriceDescription, 'error', '확인 실패', 'health check 응답을 받지 못했습니다.');
+    validateButton.disabled = true;
+    uploadMessage.textContent = message;
+  }
+}
+
+function formatHealthBlockingMessage(result) {
+  const missing = result.missingProperties || [];
+  const pageUpload = result.pageUpload || {};
+  if (missing.length) {
+    return `자동화 설정 누락: ${missing.join(', ')}`;
+  }
+  if (pageUpload.userMessage) {
+    return pageUpload.userMessage;
+  }
+  return '자동화 연결 점검 결과를 확인해 주세요.';
+}
+
 function renderHealthResult(result) {
-  const checkedAt = result.checkedAt || result.checked_at || '';
   const drive = result.drive || {};
   const dailySheet = result.dailySheet || {};
   const price = result.price || {};
   const pageUpload = result.pageUpload || {};
 
-  if (healthCheckedAt) {
-    healthCheckedAt.textContent = formatDateTime(checkedAt);
-  }
-  if (healthAllowPageUpload) {
-    healthAllowPageUpload.textContent = pageUpload.allowPageUpload ? '허용' : '미허용';
-  }
-  if (healthAllowedOrigin) {
-    healthAllowedOrigin.textContent = pageUpload.allowedPageOrigin || '-';
-  }
-  if (healthApiToken) {
-    healthApiToken.textContent = result.apiTokenConfigured ? '설정됨' : '미설정';
-  }
+  healthCheckedAt.textContent = formatDateTime(result.checkedAt);
+  healthAllowPageUpload.textContent = pageUpload.allowPageUpload ? '허용' : '미허용';
+  healthAllowedOrigin.textContent = pageUpload.allowedPageOrigin || '-';
+  healthApiToken.textContent = result.apiTokenConfigured ? '설정됨' : '미설정';
 
   if (result.healthOk) {
-    setConnectionState('success', '자동화 연결 확인 완료', 'Apps Script 응답과 주요 Google 리소스 접근이 모두 확인되었습니다.');
+    setConnectionState('success', '자동화 연결 확인 완료', 'Drive, 일일마감 시트, 단가표, 페이지 업로드 설정이 모두 확인되었습니다.');
   } else {
-    const missing = (result.missingProperties || []).join(', ');
-    const pageUploadIssue = pageUpload.userMessage || '';
-    const issueText = missing
-      ? `누락 설정: ${missing}`
-      : pageUploadIssue || '세부 상태 카드를 확인해 주세요.';
-    const issueTitle = pageUpload.issueCode === 'PAGE_UPLOAD_DISABLED'
+    const title = pageUpload.issueCode === 'PAGE_UPLOAD_DISABLED'
       ? '페이지 업로드 미허용'
       : pageUpload.issueCode === 'PAGE_UPLOAD_ORIGIN_MISMATCH'
         ? '페이지 Origin 설정 확인 필요'
         : '자동화 설정 보완 필요';
-    setConnectionState('error', issueTitle, issueText);
+    setConnectionState('error', title, formatHealthBlockingMessage(result));
   }
 
   setHealthCard(
@@ -318,7 +305,7 @@ function renderHealthResult(result) {
     dailySheet.ok ? 'success' : 'error',
     dailySheet.ok ? dailySheet.spreadsheetTitle || '접근 가능' : '접근 실패',
     dailySheet.ok
-      ? `${dailySheet.sheetName || '첫 번째 시트'} / 현재 마지막 행 ${dailySheet.lastRow || 0}`
+      ? `${dailySheet.sheetName || '첫 번째 시트'} / 헤더 점검 ${dailySheet.headerOk ? '완료' : '확인 필요'}`
       : formatResourceIssue(dailySheet),
   );
 
@@ -328,57 +315,15 @@ function renderHealthResult(result) {
     healthPriceDescription,
     price.ok ? 'success' : 'error',
     price.ok ? price.name || '접근 가능' : '접근 실패',
-    price.ok ? formatPriceResourceDescription(price) : formatResourceIssue(price),
+    price.ok ? (price.previewMessage || '단가표 접근을 확인했습니다.') : formatResourceIssue(price),
   );
-
-  setPricePreviewRows(price.previewRows || [], price.previewMessage || formatPriceResourceDescription(price));
-
-  if (!pageUpload.ok && validateButton) {
-    validateButton.disabled = true;
-    uploadMessage.textContent = pageUpload.userMessage || '페이지 업로드가 허용되지 않았습니다.';
-  }
-}
-
-function formatPriceResourceDescription(price) {
-  if (!price || !price.ok) {
-    return '단가표 접근 상태를 확인하지 못했습니다.';
-  }
-
-  if (price.previewAvailable) {
-    const previewCount = Array.isArray(price.previewRows) ? price.previewRows.length : 0;
-    return `${price.sheetName || '첫 번째 시트'} 기준 상위 ${previewCount}개 행을 표시합니다.`;
-  }
-
-  return '단가표 파일에는 접근했지만, 현재 화면 미리보기를 제공할 수 없는 형식입니다.';
 }
 
 function formatResourceIssue(resource) {
   if (!resource) {
     return '세부 오류 정보를 확인하지 못했습니다.';
   }
-
-  if (resource.userMessage) {
-    return resource.userMessage;
-  }
-
-  if (resource.errorCode) {
-    return resource.errorCode;
-  }
-
-  return '세부 오류 정보를 확인하지 못했습니다.';
-}
-
-function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result || '');
-      const base64 = value.includes(',') ? value.split(',').pop() : value;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
-    reader.readAsDataURL(file);
-  });
+  return resource.userMessage || resource.errorCode || '세부 오류 정보를 확인하지 못했습니다.';
 }
 
 function submitToAppsScript(url, payload) {
@@ -391,10 +336,11 @@ function submitToAppsScript(url, payload) {
     document.body.appendChild(iframe);
 
     let messageReceived = false;
-
     const timeoutId = window.setTimeout(() => {
       cleanup();
-      reject(new Error('UPLOAD_TIMEOUT'));
+      const error = new Error('UPLOAD_TIMEOUT');
+      error.code = 'UPLOAD_TIMEOUT';
+      reject(error);
     }, requestTimeoutMs);
 
     function cleanup() {
@@ -405,15 +351,13 @@ function submitToAppsScript(url, payload) {
       if (form) {
         form.remove();
       }
-      if (iframe) {
-        iframe.remove();
-      }
+      iframe.remove();
     }
 
     function onLoad() {
       window.setTimeout(() => {
         if (!messageReceived) {
-          uploadMessage.textContent = 'Apps Script 화면은 열렸지만 응답 메시지를 받지 못했습니다. Web App 재배포, 실행 권한, ALLOWED_PAGE_ORIGIN 설정을 확인해 주세요.';
+          uploadMessage.textContent = 'Apps Script 화면은 열렸지만 응답 메시지를 받지 못했습니다. Web App 재배포와 Origin 설정을 확인해 주세요.';
         }
       }, 3000);
     }
@@ -423,7 +367,6 @@ function submitToAppsScript(url, payload) {
       if (!data || data.callbackId !== callbackId) {
         return;
       }
-
       if (event.source !== iframe.contentWindow) {
         return;
       }
@@ -454,6 +397,7 @@ function submitToAppsScript(url, payload) {
       callbackId,
       source: 'branark-index-html',
       pageOrigin: window.location.origin,
+      mode: 'auto-closing-ledger',
       ...payload,
     };
 
@@ -470,242 +414,257 @@ function submitToAppsScript(url, payload) {
   });
 }
 
-function setResult(result) {
-  resultFileName.textContent = result.fileName || '-';
-  resultFileId.textContent = result.fileId || '-';
-  resultSheetName.textContent = [result.spreadsheetTitle, result.sheetName].filter(Boolean).join(' / ') || '-';
-  resultRow.textContent = result.appendedRow || '-';
-  resultOutput.textContent = JSON.stringify(result, null, 2);
-}
-
-function setError(error) {
-  const normalized = normalizeError(error);
-  resultOutput.textContent = JSON.stringify(normalized, null, 2);
-}
-
-function validateForm(file) {
-  if (!file) {
-    throw new Error('파일을 먼저 선택해 주세요.');
-  }
-
-  const extension = getExtension(file.name);
-  if (!allowedExtensions.includes(extension)) {
-    throw new Error('지원하지 않는 파일 형식입니다. xlsx, xls, csv 파일만 업로드할 수 있습니다.');
-  }
-
-  if (file.size > maxFileSizeBytes) {
-    throw new Error(`파일 용량은 8MB 이하여야 합니다. 현재 파일 용량은 ${formatFileSize(file.size)}입니다.`);
-  }
-
-  if (!orderDateInput.value) {
-    throw new Error('주문일을 입력해 주세요.');
-  }
-
-  if (!productNameInput.value.trim()) {
-    throw new Error('상품명을 입력해 주세요.');
-  }
-
-  const quantity = Number(quantityInput.value);
-  if (!Number.isFinite(quantity) || quantity < 1) {
-    throw new Error('수량은 1 이상으로 입력해 주세요.');
-  }
-
-  const supplyPrice = Number(supplyPriceInput.value);
-  if (!Number.isFinite(supplyPrice) || supplyPrice < 0) {
-    throw new Error('공급단가는 0 이상으로 입력해 주세요.');
-  }
-
-  return {
-    quantity,
-    supplyPrice,
-  };
-}
-
-function markValidationSuccess(file) {
-  setStatus(0, 'success', `${getExtension(file.name).toUpperCase()} / ${formatFileSize(file.size)}`);
-  setStatus(1, 'success', '입력값 확인 완료');
-}
-
 function mapAppsScriptError(payload) {
-  const error = new Error(
-    payload?.userMessage ||
-      payload?.error ||
-      payload?.message ||
-      'Apps Script 처리 중 오류가 발생했습니다.',
-  );
+  const error = new Error(payload?.userMessage || payload?.error || payload?.message || 'Apps Script 처리 중 오류가 발생했습니다.');
   error.code = payload?.errorCode || payload?.code || '';
   error.userMessage = payload?.userMessage || '';
-  error.details = payload?.details || payload?.error || '';
+  error.details = payload?.details || '';
+  error.errors = payload?.errors || [];
   error.payload = payload;
   return error;
 }
 
-function normalizeError(error) {
-  return {
-    code: error?.code || '',
-    message: formatUserError(error),
-    details: error?.details || error?.message || String(error),
-  };
-}
-
 function formatUserError(error) {
   const code = error?.code || '';
-  const baseMessage = error?.userMessage || error?.message || String(error);
   const messageByCode = {
-    CONFIG_MISSING_APPS_SCRIPT_URL: 'Apps Script URL이 설정되지 않았습니다.',
-    INVALID_PAGE_ORIGIN: '이 페이지 Origin이 Apps Script 허용 목록과 맞지 않습니다. ALLOWED_PAGE_ORIGIN 설정을 확인해 주세요.',
     INVALID_API_TOKEN: '요청 인증에 실패했습니다. GitHub Actions용 API_TOKEN 또는 페이지 업로드 허용 설정을 확인해 주세요.',
-    MISSING_DRIVE_FOLDER_ID: 'DRIVE_FOLDER_ID 설정이 누락되었습니다.',
-    MISSING_DAILY_SHEET_ID: 'DAILY_SHEET_ID 설정이 누락되었습니다.',
-    MISSING_PRICE_SHEET_ID: 'PRICE_SHEET_ID 설정이 누락되었습니다.',
-    MISSING_API_TOKEN: 'API_TOKEN 설정이 누락되었습니다. GitHub Actions 연동에는 여전히 필요합니다.',
-    DUPLICATE_FILE_NAME: '같은 파일명이 이미 Google Drive 폴더에 있습니다. 파일명을 바꾸거나 중복 허용을 체크해 주세요.',
-    INVALID_FILE_NAME: '파일명이 비어 있습니다.',
-    INVALID_QUANTITY: '수량은 1 이상이어야 합니다.',
-    INVALID_SUPPLY_PRICE: '공급단가는 0 이상이어야 합니다.',
-    INVALID_ORDER_DATE: '주문일 형식을 확인해 주세요.',
-    INVALID_PRODUCT_NAME: '상품명을 입력해 주세요.',
-    DRIVE_ACCESS_FAILED: 'Google Drive 폴더 접근에 실패했습니다. 폴더 ID와 권한을 확인해 주세요.',
-    DRIVE_UPLOAD_FAILED: 'Google Drive 파일 저장에 실패했습니다. Apps Script 실행 계정의 폴더 권한을 확인해 주세요.',
-    DAILY_SHEET_ACCESS_FAILED: '일일마감 시트 접근에 실패했습니다. 시트 ID와 공유 권한을 확인해 주세요.',
-    DAILY_SHEET_APPEND_FAILED: '일일마감 시트에 테스트 행을 추가하지 못했습니다. 첫 번째 시트와 편집 권한을 확인해 주세요.',
-    PRICE_RESOURCE_ACCESS_FAILED: '단가표 접근에 실패했습니다. PRICE_SHEET_ID와 공유 권한을 확인해 주세요.',
+    INVALID_PAGE_ORIGIN: '이 페이지 Origin은 업로드가 허용되지 않았습니다. ALLOWED_PAGE_ORIGIN 설정을 확인해 주세요.',
     PAGE_UPLOAD_DISABLED: '페이지 업로드가 허용되지 않았습니다. ALLOW_PAGE_UPLOAD=true 설정이 필요합니다.',
-    PAGE_UPLOAD_ORIGIN_MISMATCH: '페이지 업로드 허용 Origin이 브랜아크 GitHub Pages 주소와 다릅니다. ALLOWED_PAGE_ORIGIN 설정을 확인해 주세요.',
-    HEALTH_HTTP_403: 'health check 호출이 거부되었습니다. Apps Script Web App 배포 권한을 확인해 주세요.',
-    HEALTH_HTTP_404: 'Apps Script Web App URL을 찾을 수 없습니다. 최신 /exec URL인지 확인해 주세요.',
-    HEALTH_HTTP_500: 'Apps Script health check가 서버 오류로 실패했습니다. 배포 버전과 로그를 확인해 주세요.',
-    HEALTH_TIMEOUT: '자동화 상태 확인 시간이 초과되었습니다. Apps Script 응답 지연 또는 배포 문제를 확인해 주세요.',
-    HEALTH_SCRIPT_LOAD_FAILED: 'Apps Script health check 스크립트를 불러오지 못했습니다. Web App URL과 배포 상태를 확인해 주세요.',
-    UPLOAD_TIMEOUT: 'Apps Script 응답 시간이 초과되었습니다. Web App 재배포 상태와 Google 권한, 네트워크 상태를 확인해 주세요.',
+    PAGE_UPLOAD_ORIGIN_MISMATCH: '페이지 업로드 허용 Origin이 브랜아크 GitHub Pages 주소와 다릅니다.',
+    DUPLICATE_FILE_NAME: '같은 파일명이 이미 Google Drive 폴더에 있습니다. 파일명을 바꾸거나 중복 허용 옵션을 켜 주세요.',
+    UNSUPPORTED_FILE_TYPE: '지원하지 않는 파일 형식입니다. csv, xlsx, xls 파일만 업로드할 수 있습니다.',
+    SOURCE_SHEET_NOT_FOUND: '발주서에서 운송장/출고일지 후보 시트를 찾지 못했습니다.',
+    SOURCE_HEADER_NOT_FOUND: '발주서에서 상품명/수량 헤더를 찾지 못했습니다.',
+    PRODUCT_NAME_NOT_FOUND: '상품명 컬럼 또는 값을 읽지 못했습니다.',
+    INVALID_QUANTITY: '수량이 비어 있거나 숫자가 아닙니다.',
+    PRICE_NOT_FOUND: '단가표에서 상품명을 찾지 못해 일일마감 반영을 중단했습니다.',
+    PRICE_HEADER_NOT_FOUND: '단가표에서 상품명/공급단가 헤더를 찾지 못했습니다.',
+    FILE_CONVERSION_FAILED: '엑셀 파일을 Google Sheet로 변환하지 못했습니다.',
+    FILE_CONVERSION_UNAVAILABLE: 'Drive API 고급 서비스가 활성화되지 않아 엑셀 변환이 불가능합니다.',
+    DAILY_SHEET_ACCESS_FAILED: '일일마감 시트에 접근하지 못했습니다. 시트 ID와 공유 권한을 확인해 주세요.',
+    DAILY_SHEET_HEADER_MISSING: '일일마감 시트 헤더를 찾지 못했습니다.',
+    DAILY_SHEET_APPEND_FAILED: '일일마감 시트에 결과 행을 추가하지 못했습니다.',
+    AUTO_CLOSING_LEDGER_BLOCKED: '검증 오류가 있어 일일마감 반영을 중단했습니다.',
+    NO_APPEND_ROWS: '반영할 결과 행이 0건입니다.',
+    MISSING_FILE_CONTENT: '업로드 파일 내용이 비어 있습니다.',
+    UPLOAD_TIMEOUT: 'Apps Script 응답 시간이 초과되었습니다. 재배포 상태와 네트워크를 확인해 주세요.',
+    HEALTH_TIMEOUT: 'health check 응답 시간이 초과되었습니다. Apps Script 배포 상태를 확인해 주세요.',
+    HEALTH_SCRIPT_LOAD_FAILED: 'health check 스크립트를 불러오지 못했습니다. Web App URL을 확인해 주세요.',
   };
 
   if (code && messageByCode[code]) {
     return messageByCode[code];
   }
 
-  if (messageByCode[baseMessage]) {
-    return messageByCode[baseMessage];
+  return error?.userMessage || error?.message || String(error);
+}
+
+function setSummary(result) {
+  summaryFileName.textContent = result.uploadedFile?.fileName || '-';
+  summaryMode.textContent = result.mode || '-';
+  summarySourceSheets.textContent = (result.parsed?.sourceSheetNames || []).join(', ') || '-';
+  summarySourceRows.textContent = result.parsed?.sourceRowCount ?? '-';
+}
+
+function renderAggregateTable(items) {
+  if (!items?.length) {
+    aggregateTableBody.innerHTML = '<tr><td colspan="5">표시할 집계 결과가 없습니다.</td></tr>';
+    return;
   }
 
-  if (baseMessage === 'Failed to fetch' || baseMessage.includes('NetworkError')) {
-    return 'Apps Script health check 요청에 실패했습니다. 배포 URL과 네트워크 상태를 확인해 주세요.';
+  aggregateTableBody.innerHTML = items.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.orderDate || '-')}</td>
+      <td>${escapeHtml((item.rawProductNames || []).join(', ') || item.productName || '-')}</td>
+      <td>${escapeHtml(item.normalizedProductName || '-')}</td>
+      <td>${escapeHtml(formatNumber(item.quantity))}</td>
+      <td>${escapeHtml((item.sourceSheetNames || []).join(', ') || '-')}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPriceMatchTable(matches) {
+  if (!matches?.length) {
+    priceMatchTableBody.innerHTML = '<tr><td colspan="4">표시할 단가 매칭 결과가 없습니다.</td></tr>';
+    return;
   }
 
-  if (baseMessage.includes('aborted')) {
-    return '자동화 상태 확인 시간이 초과되었습니다. Apps Script 응답 지연 또는 배포 문제를 확인해 주세요.';
+  priceMatchTableBody.innerHTML = matches.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.productName || '-')}</td>
+      <td>${escapeHtml(item.normalizedProductName || '-')}</td>
+      <td>${item.supplyPrice === null || item.supplyPrice === undefined ? '-' : `${formatNumber(item.supplyPrice)}원`}</td>
+      <td>${item.matched ? `매칭 완료 (${escapeHtml(item.matchedBy || 'exact')})` : '매칭 실패'}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPreviewTable(rows) {
+  if (!rows?.length) {
+    previewTableBody.innerHTML = '<tr><td colspan="7">표시할 반영 예정 행이 없습니다.</td></tr>';
+    return;
   }
 
-  return baseMessage;
+  previewTableBody.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.orderDate || '-')}</td>
+      <td>${escapeHtml(row.productName || '-')}</td>
+      <td>${escapeHtml(row.normalizedProductName || '-')}</td>
+      <td>${escapeHtml(formatNumber(row.quantity))}</td>
+      <td>${escapeHtml(formatNumber(row.supplyPrice))}</td>
+      <td>${escapeHtml(formatNumber(row.totalPrice))}</td>
+      <td>${escapeHtml(row.memo || '-')}</td>
+    </tr>
+  `).join('');
+}
+
+function renderIssues(warnings, errors) {
+  const warningList = warnings || [];
+  const errorList = errors || [];
+  const items = [];
+
+  errorList.forEach((item) => {
+    items.push(`<div class="issue-card issue-error"><strong>오류</strong><p>${escapeHtml(item.message || item.code || '오류가 발생했습니다.')}</p></div>`);
+  });
+  warningList.forEach((item) => {
+    items.push(`<div class="issue-card issue-warning"><strong>확인 필요</strong><p>${escapeHtml(item.message || item.code || '확인이 필요합니다.')}</p></div>`);
+  });
+
+  issuesPanel.innerHTML = items.length
+    ? items.join('')
+    : '<p class="issue-empty">오류와 경고 없이 처리되었습니다.</p>';
+}
+
+function renderFinalResult(result) {
+  resultFileId.textContent = result.uploadedFile?.fileId || '-';
+  resultSheetName.textContent = [result.appended?.spreadsheetTitle, result.appended?.sheetName].filter(Boolean).join(' / ') || '-';
+  resultRowCount.textContent = result.appended?.rowCount ?? 0;
+  resultWarningCount.textContent = (result.warnings || []).length;
+  resultOutput.textContent = JSON.stringify(result, null, 2);
+}
+
+function applySuccessStatuses(result) {
+  setStatus(0, 'success', '검증 완료');
+  setStatus(1, 'success', '전송 완료');
+  setStatus(2, 'success', `${result.parsed?.sourceSheetNames?.length || 0}개 시트 분석`);
+  setStatus(3, 'success', `${result.matched?.matchedCount || 0}건 매칭`);
+  setStatus(4, 'success', `${result.rows?.length || 0}행 구성`);
+  setStatus(5, 'success', `${result.appended?.rowCount || 0}행 반영`);
+}
+
+function applyFailureStatus(error) {
+  const code = error?.code || '';
+  setStatus(0, 'success', '파일 확인 완료');
+  setStatus(1, 'success', '전송 완료');
+
+  if (['SOURCE_SHEET_NOT_FOUND', 'SOURCE_HEADER_NOT_FOUND', 'FILE_CONVERSION_FAILED', 'FILE_CONVERSION_UNAVAILABLE'].includes(code)) {
+    setStatus(2, 'error', '파일 분석 실패');
+    return;
+  }
+  if (['PRICE_NOT_FOUND', 'PRICE_HEADER_NOT_FOUND', 'PRICE_RESOURCE_ACCESS_FAILED'].includes(code)) {
+    setStatus(2, 'success', '파일 분석 완료');
+    setStatus(3, 'error', '단가 매칭 실패');
+    return;
+  }
+  if (['DAILY_SHEET_ACCESS_FAILED', 'DAILY_SHEET_HEADER_MISSING', 'DAILY_SHEET_APPEND_FAILED', 'AUTO_CLOSING_LEDGER_BLOCKED'].includes(code)) {
+    setStatus(2, 'success', '파일 분석 완료');
+    setStatus(3, 'success', '단가 매칭 완료');
+    setStatus(4, 'error', '반영 차단');
+    return;
+  }
+  if (code === 'UPLOAD_TIMEOUT') {
+    setStatus(1, 'error', '응답 시간 초과');
+    return;
+  }
+
+  const pendingIndex = statusItems.findIndex((item) => item.dataset.state === 'waiting' || item.dataset.state === 'processing');
+  if (pendingIndex >= 0) {
+    setStatus(pendingIndex, 'error', '실패');
+  }
 }
 
 fileInput.addEventListener('change', () => {
   resetStatus();
+  resetResultSections();
+
   const file = fileInput.files?.[0];
   if (!file) {
     fileName.textContent = '발주서 파일을 선택하세요';
-    resultFileName.textContent = '-';
     uploadMessage.textContent = '파일을 선택한 뒤 업로드를 진행하세요.';
     return;
   }
 
-  fileName.textContent = file.name;
-  resultFileName.textContent = file.name;
-
   try {
-    validateForm(file);
-    setStatus(0, 'success', `${getExtension(file.name).toUpperCase()} / ${formatFileSize(file.size)}`);
-    uploadMessage.textContent = '파일 형식과 기본 입력값이 확인되었습니다. 업로드를 진행할 수 있습니다.';
+    validateFile(file);
+    fileName.textContent = `${file.name} (${getExtension(file.name).toUpperCase()} / ${formatFileSize(file.size)})`;
+    setStatus(0, 'success', '업로드 준비 완료');
+    uploadMessage.textContent = '파일 검증이 완료되었습니다. 자동 분석을 시작할 수 있습니다.';
   } catch (error) {
-    setStatus(0, 'error', '검증 실패');
+    fileName.textContent = file.name;
+    setStatus(0, 'error', '파일 검증 실패');
     uploadMessage.textContent = formatUserError(error);
   }
 });
 
 validateButton.addEventListener('click', async () => {
-  const configState = validateAutomationConfig();
   const file = fileInput.files?.[0];
+  const configState = validateAutomationConfig();
 
   resetStatus();
+  resetResultSections();
   resultOutput.textContent = '처리 중입니다...';
 
   try {
     if (!configState.ok) {
-      const configError = new Error(configState.message);
-      configError.code = 'CONFIG_MISSING_APPS_SCRIPT_URL';
-      throw configError;
+      throw new Error(configState.message);
+    }
+    if (!lastHealthResult?.healthOk) {
+      throw new Error('자동화 연결 점검이 완료되지 않았습니다. health check 결과를 먼저 확인해 주세요.');
     }
 
-    if (!lastHealthResult) {
-      throw new Error('먼저 자동화 연결 점검이 완료되어야 합니다. health check를 다시 확인해 주세요.');
-    }
-
-    if (!lastHealthResult.healthOk) {
-      throw new Error('자동화 설정에 누락 또는 접근 실패가 있어 업로드를 진행할 수 없습니다.');
-    }
-
-    const { quantity, supplyPrice } = validateForm(file);
-    markValidationSuccess(file);
+    validateFile(file);
+    setStatus(0, 'success', '업로드 조건 확인 완료');
+    setStatus(1, 'processing', 'Apps Script 요청 전송 중');
 
     validateButton.disabled = true;
     validateButton.textContent = '처리 중...';
-
-    setStatus(2, 'processing', 'Apps Script 요청 전송 중');
-    uploadMessage.textContent = '파일을 읽고 브랜아크 Apps Script로 업로드하고 있습니다.';
+    uploadMessage.textContent = '발주서 파일을 업로드하고 자동 분석을 시작합니다.';
 
     const fileBase64 = await readFileAsBase64(file);
-
-    setStatus(2, 'success', '전송 완료');
-    setStatus(3, 'processing', '중복 파일명 확인 중');
-    setStatus(4, 'processing', 'Drive 저장 중');
-    setStatus(5, 'processing', '시트 반영 중');
-
     const result = await submitToAppsScript(appsScriptWebAppUrl, {
       fileName: file.name,
       fileMimeType: file.type || 'application/octet-stream',
       fileBase64,
-      orderDate: orderDateInput.value,
-      productName: productNameInput.value.trim(),
-      quantity,
-      supplyPrice,
       allowDuplicateFile: allowDuplicateInput.checked,
     });
 
-    setStatus(3, 'success', allowDuplicateInput.checked ? '중복 허용 처리' : '중복 없음');
-    setStatus(4, 'success', 'Drive 저장 완료');
-    setStatus(5, 'success', `테스트 행 ${result.appendedRow || '-'}번 추가`);
-    setResult(result);
-    uploadMessage.textContent = '업로드가 완료되었습니다. Drive 파일 생성과 일일마감 테스트 행 추가 결과를 확인해 주세요.';
+    setSummary(result);
+    renderAggregateTable(result.aggregatedItems);
+    renderPriceMatchTable(result.priceMatches);
+    renderPreviewTable(result.rows);
+    renderIssues(result.warnings, result.errors);
+    renderFinalResult(result);
+    applySuccessStatuses(result);
+
+    uploadMessage.textContent = '발주서 분석과 일일마감 반영이 완료되었습니다.';
     await runHealthCheck();
   } catch (error) {
     const message = formatUserError(error);
     uploadMessage.textContent = message;
-    setError(error);
-
-    const code = error?.code || '';
-    if (code === 'DUPLICATE_FILE_NAME') {
-      setStatus(3, 'error', '중복 파일명');
-      setStatus(4, 'waiting', '저장 중단');
-      setStatus(5, 'waiting', '반영 중단');
-    } else if (code === 'DRIVE_UPLOAD_FAILED' || code === 'DRIVE_ACCESS_FAILED') {
-      setStatus(4, 'error', 'Drive 실패');
-      setStatus(5, 'waiting', '반영 중단');
-    } else if (code === 'DAILY_SHEET_APPEND_FAILED' || code === 'DAILY_SHEET_ACCESS_FAILED') {
-      setStatus(5, 'error', '시트 실패');
-    } else if (code === 'UPLOAD_TIMEOUT') {
-      setStatus(2, 'error', '응답 시간 초과');
-    } else {
-      const firstPendingIndex = statusItems.findIndex((item) => item.dataset.state === 'waiting' || item.dataset.state === 'processing');
-      if (firstPendingIndex >= 0) {
-        setStatus(firstPendingIndex, 'error', '실패');
-      }
-    }
+    renderIssues([], error.errors || []);
+    resultOutput.textContent = JSON.stringify({
+      code: error.code || '',
+      message,
+      details: error.details || error.message || String(error),
+      errors: error.errors || [],
+    }, null, 2);
+    applyFailureStatus(error);
   } finally {
     validateButton.disabled = !(lastHealthResult && lastHealthResult.healthOk);
-    validateButton.textContent = '발주서 업로드 및 테스트 행 작성';
+    validateButton.textContent = '발주서 업로드 및 자동 분석 시작';
   }
 });
 
-setToday();
 resetStatus();
+resetResultSections();
 runHealthCheck();

@@ -30,3 +30,4 @@
 - `folder-structure.md` : 폴더 구조
 - `validation-rules.md` : 검증 규칙
 - `spreadsheet-spec.md` : 생성될 마감원장 시트 규격
+- `real-file-parser-implementation.md` : 실파일 파서 / 단가 매칭 / 일일마감 반영 구현 메모

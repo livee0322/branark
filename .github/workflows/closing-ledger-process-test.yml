@@ -37,12 +37,11 @@ permissions:
 
 jobs:
   process-test:
+    name: Call Apps Script closing ledger process
     runs-on: ubuntu-latest
     env:
-      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID || secrets.BRANARK_ORDER_UPLOAD_FOLDER_ID || vars.BRANARK_ORDER_UPLOAD_FOLDER_ID }}
-      DAILY_SHEET_ID: ${{ secrets.DAILY_SHEET_ID || secrets.DAILY_SPREADSHEET_ID || secrets.BRANARK_CLOSING_LEDGER_SPREADSHEET_ID || vars.BRANARK_CLOSING_LEDGER_SPREADSHEET_ID }}
-      PRICE_SHEET_ID: ${{ secrets.PRICE_SHEET_ID || secrets.PRICE_FILE_ID || secrets.BRANARK_PRICE_FILE_ID || vars.BRANARK_PRICE_FILE_ID }}
+      APPS_SCRIPT_WEB_APP_URL: ${{ secrets.APPS_SCRIPT_WEB_APP_URL || vars.APPS_SCRIPT_WEB_APP_URL }}
+      APPS_SCRIPT_API_TOKEN: ${{ secrets.APPS_SCRIPT_API_TOKEN || vars.APPS_SCRIPT_API_TOKEN }}
       TEST_FILE_NAME: ${{ inputs.test_file_name }}
       ORDER_DATE: ${{ inputs.order_date }}
       PRODUCT_NAME: ${{ inputs.product_name }}
@@ -50,184 +49,67 @@ jobs:
       SUPPLY_PRICE: ${{ inputs.supply_price }}
       ALLOW_DUPLICATE_FILE: ${{ inputs.allow_duplicate_file }}
     steps:
-      - name: Install Google API client
+      - name: Call Google Apps Script Web App
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install google-api-python-client google-auth
-
-      - name: Create Drive test file and append daily sheet row
-        run: |
+          set -euo pipefail
           python - <<'PY'
-          import base64
-          import binascii
-          import io
           import json
           import os
-          from datetime import datetime, timezone, timedelta
-          from google.oauth2 import service_account
-          from googleapiclient.discovery import build
-          from googleapiclient.http import MediaIoBaseUpload
+          import sys
+          import urllib.error
+          import urllib.request
 
-          def load_service_account_info(raw_value: str) -> dict:
-              raw = (raw_value or "").strip()
-
-              if not raw:
-                  raise SystemExit("GOOGLE_SERVICE_ACCOUNT_JSON 값이 비어 있습니다.")
-
-              if raw.startswith("GOOGLE_SERVICE_ACCOUNT_JSON="):
-                  raw = raw.split("=", 1)[1].strip()
-                  print("GOOGLE_SERVICE_ACCOUNT_JSON 앞의 변수명 prefix를 제거하고 다시 읽습니다.")
-
-              if raw.startswith("export GOOGLE_SERVICE_ACCOUNT_JSON="):
-                  raw = raw.split("=", 1)[1].strip()
-                  print("export prefix를 제거하고 다시 읽습니다.")
-
-              def parse_json(value: str):
-                  parsed = json.loads(value)
-                  if isinstance(parsed, str):
-                      parsed = json.loads(parsed)
-                  return parsed
-
-              try:
-                  info = parse_json(raw)
-              except json.JSONDecodeError as first_error:
-                  try:
-                      decoded = base64.b64decode(raw).decode("utf-8").strip()
-                      info = parse_json(decoded)
-                      print("GOOGLE_SERVICE_ACCOUNT_JSON 값을 base64로 해석해 읽었습니다.")
-                  except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError):
-                      preview_start = raw[:20].replace("\n", "\\n")
-                      preview_end = raw[-20:].replace("\n", "\\n")
-                      print("GOOGLE_SERVICE_ACCOUNT_JSON 형식 오류")
-                      print(f"- 시작 일부: {preview_start}")
-                      print(f"- 끝 일부: {preview_end}")
-                      print(f"- JSON 오류: {first_error}")
-                      raise SystemExit(
-                          "GOOGLE_SERVICE_ACCOUNT_JSON에는 변수명 없이 서비스 계정 JSON 본문 전체만 넣어야 합니다. "
-                          "값은 { 로 시작해서 } 로 끝나야 합니다."
-                      )
-
-              if not isinstance(info, dict):
-                  raise SystemExit("GOOGLE_SERVICE_ACCOUNT_JSON을 읽었지만 JSON object 형식이 아닙니다.")
-
-              required_keys = ["type", "client_email", "token_uri", "private_key", "private_key_id"]
-              missing_keys = [key for key in required_keys if key not in info]
-              if missing_keys:
-                  raise SystemExit("서비스 계정 JSON 필수 키 누락: " + ", ".join(missing_keys))
-
-              private_key = str(info.get("private_key") or "").strip()
-              if "\\n" in private_key:
-                  private_key = private_key.replace("\\n", "\n")
-                  print("private_key의 escaped newline을 실제 줄바꿈으로 보정했습니다.")
-
-              if not private_key.startswith("-----BEGIN PRIVATE KEY-----"):
-                  raise SystemExit("private_key가 -----BEGIN PRIVATE KEY----- 로 시작하지 않습니다. JSON 키 파일 전체를 다시 저장하세요.")
-
-              if "-----END PRIVATE KEY-----" not in private_key:
-                  raise SystemExit("private_key에 -----END PRIVATE KEY----- 가 없습니다. JSON 키 파일 전체를 다시 저장하세요.")
-
-              if not private_key.endswith("\n"):
-                  private_key += "\n"
-
-              info["private_key"] = private_key
-              print("Google service account JSON 형식 확인 완료:", info.get("client_email"))
-              return info
-
-          required = [
-              "GOOGLE_SERVICE_ACCOUNT_JSON",
-              "DRIVE_FOLDER_ID",
-              "DAILY_SHEET_ID",
-              "PRICE_SHEET_ID",
-          ]
+          required = ["APPS_SCRIPT_WEB_APP_URL", "APPS_SCRIPT_API_TOKEN"]
           missing = [name for name in required if not os.environ.get(name)]
           if missing:
               raise SystemExit("필수 설정값 누락: " + ", ".join(missing))
 
-          info = load_service_account_info(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-          credentials = service_account.Credentials.from_service_account_info(
-              info,
-              scopes=[
-                  "https://www.googleapis.com/auth/drive",
-                  "https://www.googleapis.com/auth/spreadsheets",
-              ],
+          url = os.environ["APPS_SCRIPT_WEB_APP_URL"].strip()
+          if not url.startswith("https://script.google.com/"):
+              raise SystemExit("APPS_SCRIPT_WEB_APP_URL은 Google Apps Script Web App 배포 URL이어야 합니다.")
+
+          payload = {
+              "apiToken": os.environ["APPS_SCRIPT_API_TOKEN"],
+              "testFileName": os.environ["TEST_FILE_NAME"].strip(),
+              "orderDate": os.environ["ORDER_DATE"].strip(),
+              "productName": os.environ["PRODUCT_NAME"].strip(),
+              "quantity": int(os.environ["QUANTITY"]),
+              "supplyPrice": int(os.environ["SUPPLY_PRICE"]),
+              "allowDuplicateFile": os.environ["ALLOW_DUPLICATE_FILE"].lower() == "true",
+          }
+
+          body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+          request = urllib.request.Request(
+              url,
+              data=body,
+              headers={"Content-Type": "application/json"},
+              method="POST",
           )
-          drive = build("drive", "v3", credentials=credentials)
-          sheets = build("sheets", "v4", credentials=credentials)
 
-          drive_folder_id = os.environ["DRIVE_FOLDER_ID"]
-          daily_sheet_id = os.environ["DAILY_SHEET_ID"]
-          price_sheet_id = os.environ["PRICE_SHEET_ID"]
-          file_name = os.environ["TEST_FILE_NAME"].strip()
-          order_date = os.environ["ORDER_DATE"].strip()
-          product_name = os.environ["PRODUCT_NAME"].strip()
-          quantity = int(os.environ["QUANTITY"])
-          supply_price = int(os.environ["SUPPLY_PRICE"])
-          total_price = quantity * supply_price
-          allow_duplicate = os.environ["ALLOW_DUPLICATE_FILE"].lower() == "true"
+          try:
+              with urllib.request.urlopen(request, timeout=90) as response:
+                  response_body = response.read().decode("utf-8")
+          except urllib.error.HTTPError as error:
+              error_body = error.read().decode("utf-8", errors="replace")
+              print(error_body)
+              raise SystemExit(f"Apps Script 호출 실패: HTTP {error.code}")
+          except urllib.error.URLError as error:
+              raise SystemExit(f"Apps Script 연결 실패: {error}")
 
-          folder = drive.files().get(
-              fileId=drive_folder_id,
-              fields="id,name,mimeType",
-              supportsAllDrives=True,
-          ).execute()
-          print("Drive folder OK:", folder.get("name"), folder.get("id"))
+          print(response_body)
 
-          safe_name = file_name.replace("'", "\\'")
-          query = f"name = '{safe_name}' and '{drive_folder_id}' in parents and trashed = false"
-          duplicate_result = drive.files().list(
-              q=query,
-              fields="files(id,name)",
-              supportsAllDrives=True,
-              includeItemsFromAllDrives=True,
-          ).execute()
-          duplicates = duplicate_result.get("files", [])
-          if duplicates and not allow_duplicate:
-              raise SystemExit("중복된 파일명입니다: " + duplicates[0]["name"])
+          try:
+              result = json.loads(response_body)
+          except json.JSONDecodeError as error:
+              raise SystemExit(f"Apps Script 응답이 JSON이 아닙니다: {error}")
 
-          kst = timezone(timedelta(hours=9))
-          now = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S KST")
-          body_text = "\n".join([
-              "브랜아크 일일마감 자동화 실제 구동 테스트",
-              f"생성시각: {now}",
-              f"주문일: {order_date}",
-              f"상품명: {product_name}",
-              f"수량: {quantity}",
-              f"공급단가: {supply_price}",
-              f"공급가 합계: {total_price}",
-          ])
-          media = MediaIoBaseUpload(io.BytesIO(body_text.encode("utf-8")), mimetype="text/plain")
-          created_file = drive.files().create(
-              body={"name": file_name, "parents": [drive_folder_id]},
-              media_body=media,
-              fields="id,name,webViewLink",
-              supportsAllDrives=True,
-          ).execute()
-          print("Drive file created:", created_file.get("name"), created_file.get("id"))
+          if not result.get("ok"):
+              raise SystemExit("Apps Script 처리 실패: " + str(result.get("error")))
 
-          price_file = drive.files().get(
-              fileId=price_sheet_id,
-              fields="id,name,mimeType",
-              supportsAllDrives=True,
-          ).execute()
-          print("Price file OK:", price_file.get("name"), price_file.get("mimeType"))
-
-          spreadsheet = sheets.spreadsheets().get(
-              spreadsheetId=daily_sheet_id,
-              fields="spreadsheetId,properties.title,sheets.properties.title",
-          ).execute()
-          sheet_title = spreadsheet.get("sheets", [{}])[0].get("properties", {}).get("title", "Sheet1")
-          safe_sheet_title = sheet_title.replace("'", "''")
-          print("Daily sheet OK:", spreadsheet["properties"]["title"], "/", sheet_title)
-
-          memo = "[TEST] GitHub Actions 실제 구동 / Drive file ID: " + created_file["id"]
-          row = [[order_date, product_name, quantity, supply_price, total_price, memo]]
-          append_result = sheets.spreadsheets().values().append(
-              spreadsheetId=daily_sheet_id,
-              range=f"'{safe_sheet_title}'!A:F",
-              valueInputOption="USER_ENTERED",
-              insertDataOption="INSERT_ROWS",
-              body={"values": row},
-          ).execute()
-          print("Daily sheet appended:", append_result.get("updates", {}).get("updatedRange"))
-          print("브랜아크 일일마감 실제 구동 테스트 완료")
+          print("브랜아크 일일마감 Apps Script 처리 완료")
+          print("- Drive file:", result.get("fileName"), result.get("fileId"))
+          print("- Drive URL:", result.get("fileUrl"))
+          print("- Daily sheet:", result.get("spreadsheetTitle"), "/", result.get("sheetName"))
+          print("- Appended row:", result.get("appendedRow"))
           PY

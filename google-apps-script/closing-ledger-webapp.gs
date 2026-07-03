@@ -18,7 +18,7 @@ function doGet(e) {
 
   try {
     if (params.action === 'health') {
-      return jsonOutput_(runHealthCheck_());
+      return jsonOutput_(runHealthCheck_(), params.callback);
     }
 
     if (params.action === 'process') {
@@ -238,7 +238,12 @@ function runClosingLedgerProcess_(payload, props) {
   var dailySheetId = requireValue_(props.getProperty('DAILY_SHEET_ID'), 'DAILY_SHEET_ID');
   var priceSheetId = requireValue_(props.getProperty('PRICE_SHEET_ID'), 'PRICE_SHEET_ID');
 
-  var fileName = String(payload.fileName || '').trim();
+  var fileName = String(
+    payload.fileName ||
+    payload.testFileName ||
+    payload.test_file_name ||
+    ''
+  ).trim();
   var fileMimeType = String(payload.fileMimeType || 'application/octet-stream');
   var fileBase64 = String(payload.fileBase64 || '').trim();
   var orderDate = String(payload.orderDate || '').trim();

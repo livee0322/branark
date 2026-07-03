@@ -1,0 +1,166 @@
+name: Branark Closing Ledger Process Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_file_name:
+        description: "Drive에 생성할 테스트 파일명"
+        required: true
+        default: "branark-closing-ledger-test.txt"
+      order_date:
+        description: "일일 마감 양식 주문일"
+        required: true
+        default: "2026-07-03"
+      product_name:
+        description: "테스트 상품명"
+        required: true
+        default: "[TEST] 김밥집 궁채 2kg"
+      quantity:
+        description: "테스트 수량"
+        required: true
+        default: "1"
+      supply_price:
+        description: "테스트 공급단가"
+        required: true
+        default: "7425"
+      allow_duplicate_file:
+        description: "같은 파일명이 있어도 생성 허용"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+
+jobs:
+  process-test:
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID || secrets.BRANARK_ORDER_UPLOAD_FOLDER_ID || vars.BRANARK_ORDER_UPLOAD_FOLDER_ID }}
+      DAILY_SHEET_ID: ${{ secrets.DAILY_SHEET_ID || secrets.DAILY_SPREADSHEET_ID || secrets.BRANARK_CLOSING_LEDGER_SPREADSHEET_ID || vars.BRANARK_CLOSING_LEDGER_SPREADSHEET_ID }}
+      PRICE_SHEET_ID: ${{ secrets.PRICE_SHEET_ID || secrets.PRICE_FILE_ID || secrets.BRANARK_PRICE_FILE_ID || vars.BRANARK_PRICE_FILE_ID }}
+      TEST_FILE_NAME: ${{ inputs.test_file_name }}
+      ORDER_DATE: ${{ inputs.order_date }}
+      PRODUCT_NAME: ${{ inputs.product_name }}
+      QUANTITY: ${{ inputs.quantity }}
+      SUPPLY_PRICE: ${{ inputs.supply_price }}
+      ALLOW_DUPLICATE_FILE: ${{ inputs.allow_duplicate_file }}
+    steps:
+      - name: Install Google API client
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install google-api-python-client google-auth
+
+      - name: Create Drive test file and append daily sheet row
+        run: |
+          python - <<'PY'
+          import io
+          import json
+          import os
+          from datetime import datetime, timezone, timedelta
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaIoBaseUpload
+
+          required = [
+              "GOOGLE_SERVICE_ACCOUNT_JSON",
+              "DRIVE_FOLDER_ID",
+              "DAILY_SHEET_ID",
+              "PRICE_SHEET_ID",
+          ]
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              raise SystemExit("필수 설정값 누락: " + ", ".join(missing))
+
+          info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+          credentials = service_account.Credentials.from_service_account_info(
+              info,
+              scopes=[
+                  "https://www.googleapis.com/auth/drive",
+                  "https://www.googleapis.com/auth/spreadsheets",
+              ],
+          )
+          drive = build("drive", "v3", credentials=credentials)
+          sheets = build("sheets", "v4", credentials=credentials)
+
+          drive_folder_id = os.environ["DRIVE_FOLDER_ID"]
+          daily_sheet_id = os.environ["DAILY_SHEET_ID"]
+          price_sheet_id = os.environ["PRICE_SHEET_ID"]
+          file_name = os.environ["TEST_FILE_NAME"].strip()
+          order_date = os.environ["ORDER_DATE"].strip()
+          product_name = os.environ["PRODUCT_NAME"].strip()
+          quantity = int(os.environ["QUANTITY"])
+          supply_price = int(os.environ["SUPPLY_PRICE"])
+          total_price = quantity * supply_price
+          allow_duplicate = os.environ["ALLOW_DUPLICATE_FILE"].lower() == "true"
+
+          folder = drive.files().get(
+              fileId=drive_folder_id,
+              fields="id,name,mimeType",
+              supportsAllDrives=True,
+          ).execute()
+          print("Drive folder OK:", folder.get("name"), folder.get("id"))
+
+          safe_name = file_name.replace("'", "\\'")
+          query = f"name = '{safe_name}' and '{drive_folder_id}' in parents and trashed = false"
+          duplicate_result = drive.files().list(
+              q=query,
+              fields="files(id,name)",
+              supportsAllDrives=True,
+              includeItemsFromAllDrives=True,
+          ).execute()
+          duplicates = duplicate_result.get("files", [])
+          if duplicates and not allow_duplicate:
+              raise SystemExit("중복된 파일명입니다: " + duplicates[0]["name"])
+
+          kst = timezone(timedelta(hours=9))
+          now = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S KST")
+          body_text = "\n".join([
+              "브랜아크 일일마감 자동화 실제 구동 테스트",
+              f"생성시각: {now}",
+              f"주문일: {order_date}",
+              f"상품명: {product_name}",
+              f"수량: {quantity}",
+              f"공급단가: {supply_price}",
+              f"공급가 합계: {total_price}",
+          ])
+          media = MediaIoBaseUpload(io.BytesIO(body_text.encode("utf-8")), mimetype="text/plain")
+          created_file = drive.files().create(
+              body={"name": file_name, "parents": [drive_folder_id]},
+              media_body=media,
+              fields="id,name,webViewLink",
+              supportsAllDrives=True,
+          ).execute()
+          print("Drive file created:", created_file.get("name"), created_file.get("id"))
+
+          price_file = drive.files().get(
+              fileId=price_sheet_id,
+              fields="id,name,mimeType",
+              supportsAllDrives=True,
+          ).execute()
+          print("Price file OK:", price_file.get("name"), price_file.get("mimeType"))
+
+          spreadsheet = sheets.spreadsheets().get(
+              spreadsheetId=daily_sheet_id,
+              fields="spreadsheetId,properties.title,sheets.properties.title",
+          ).execute()
+          sheet_title = spreadsheet.get("sheets", [{}])[0].get("properties", {}).get("title", "Sheet1")
+          safe_sheet_title = sheet_title.replace("'", "''")
+          print("Daily sheet OK:", spreadsheet["properties"]["title"], "/", sheet_title)
+
+          memo = "[TEST] GitHub Actions 실제 구동 / Drive file ID: " + created_file["id"]
+          row = [[order_date, product_name, quantity, supply_price, total_price, memo]]
+          append_result = sheets.spreadsheets().values().append(
+              spreadsheetId=daily_sheet_id,
+              range=f"'{safe_sheet_title}'!A:F",
+              valueInputOption="USER_ENTERED",
+              insertDataOption="INSERT_ROWS",
+              body={"values": row},
+          ).execute()
+          print("Daily sheet appended:", append_result.get("updates", {}).get("updatedRange"))
+          print("브랜아크 일일마감 실제 구동 테스트 완료")
+          PY
